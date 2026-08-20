@@ -1,6 +1,6 @@
 # AI Readiness Scorecard
 
-Scores a New Relic account's AI readiness across **10 dimensions**, via NerdGraph. Produces a
+Scores a New Relic account's AI readiness across **14 dimensions**, via NerdGraph. Produces a
 table, JSON, a CIS-benchmark-style HTML report, and a live dashboard inside New Relic itself.
 
 Zero dependencies — stdlib-only Python, nothing to `pip install` unless you want the packaged
@@ -25,12 +25,14 @@ Or install it as a real command: `pip install -e . && ai-readiness --mock`. `mak
 `make test`, `make demo` also work — see the [Makefile](Makefile).
 
 Progress for each dimension prints to stderr as it runs (useful since a live scan makes many
-sequential NerdGraph/NRQL calls and can take a while — `autopilot` alone can be 50+ calls on an
-account with many Workflow Automation canvases). Pass `--quiet`/`-q` to suppress it.
+sequential NerdGraph/NRQL calls and can take a while — `autopilot` and `human_approval_gates`
+each make one YAML fetch per Workflow Automation canvas, so together they can be 100+ calls on
+an account with many canvases; budget more than the default 2-minute shell timeout for a full
+live run on such an account). Pass `--quiet`/`-q` to suppress the progress lines.
 
 ## What it scores
 
-Two lenses, 10 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**. Lens and
+Two lenses, 14 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**. Lens and
 overall scores are displayed on a **0-10 scale** (the 4 internal tiers are what's actually
 measured; 0-10 is just the display convention for the roll-up numbers). Each dimension's
 remediation text is tier-specific — a concrete next step to move up a level, not one generic
@@ -43,11 +45,15 @@ sentence regardless of where you're starting from.
 | | `ai_monitoring` | medium | LLM generation events + token/cost visibility (NR *and* OTel GenAI paths) |
 | | `ai_agent_tracing` | high | Tool-call & RAG/retrieval span tracing (NR *and* OTel GenAI paths) |
 | | `ai_quality_feedback` | unverified | AI output feedback/eval scoring |
+| | `human_approval_gates` | medium | Human-approval step before autonomous agent actions (OWASP LLM08) |
+| | `model_vendor_diversity` | high | LLM provider diversity — single-vendor lock-in risk |
 | | `security_vuln` | unverified | Vulnerability-management coverage |
 | AI for Observability | `workflow_automation` | high | Workflow Automation canvases configured |
 | | `autopilot` | medium | Canvases that invoke Autopilot |
 | | `alerting_anomaly` | high | Enabled alert conditions |
 | | `dashboards_logs` | high | Dashboard count + log volume |
+| | `ai_cost_governance` | high | Alert conditions targeting AI token/cost spend |
+| | `ai_change_tracking` | medium | Change Tracking events referencing AI/prompt/model changes |
 
 Run `python3 -m ai_readiness --list-dimensions` to see this live, with each dimension's exact
 label.
@@ -67,6 +73,18 @@ since OpenLLMetry captures that content **by default**; worth a PII/data-governa
 if it's nonzero. Note: the `gen_ai.*` convention itself is still spec-flagged *Development*
 status, not Stable — expect attribute renames over time (`gen_ai.system` → `gen_ai.provider.name`
 already happened in v1.37.0).
+
+Four more dimensions target modern, 2025-2026-era AI risk patterns rather than plain telemetry
+coverage: **`human_approval_gates`** (OWASP LLM08, Excessive Agency — is an autonomous action
+gated by a human checkpoint, or does the agent just act?), **`model_vendor_diversity`** (single-
+provider lock-in risk — a real business-continuity exposure given how often providers deprecate
+models or change pricing), **`ai_cost_governance`** (alert conditions that actually target AI
+token/cost spend, not just generic infra cost), and **`ai_change_tracking`** (are prompt/model
+changes tracked as Change Tracking events, the same way a code deploy is, so an AI regression is
+traceable back to "what changed"). Two adjacent ideas were considered and deliberately **not**
+built yet: shadow-AI detection (unsanctioned LLM tool usage via network egress) and MCP-server-
+specific tracing — both need more groundwork on what's actually queryable before they'd be
+more than a guess.
 
 ## Confidence legend
 
@@ -115,7 +133,8 @@ its own file:
 
 ```bash
 python3 -m ai_readiness --only workflow_automation,alerting_anomaly,dashboards_logs,apm_coverage,ai_agent_tracing
-python3 -m ai_readiness --only autopilot,infra_gpu,ai_monitoring
+python3 -m ai_readiness --only autopilot,infra_gpu,ai_monitoring,model_vendor_diversity,ai_cost_governance
+python3 -m ai_readiness --only ai_change_tracking,human_approval_gates  # human_approval_gates is slow: one YAML fetch per canvas
 python3 -m ai_readiness --only security_vuln        # expect this may need a query-shape fix
 python3 -m ai_readiness --only ai_quality_feedback  # expect Absent even when the query is right
 ```

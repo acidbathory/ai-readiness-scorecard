@@ -26,6 +26,18 @@ THRESHOLDS = {
     "ai_quality_feedback": {
         "min_feedback_events_for_tier": {1: 1, 2: 25, 3: 200},
     },
+    "human_approval_gates": {
+        "min_gate_coverage_pct_for_tier": {1: 1, 2: 50, 3: 90},
+    },
+    "model_vendor_diversity": {
+        "min_vendor_count_for_tier": {1: 1, 2: 2, 3: 3},
+    },
+    "ai_cost_governance": {
+        "min_cost_conditions_for_tier": {1: 1, 2: 2, 3: 4},
+    },
+    "ai_change_tracking": {
+        "min_ai_change_events_for_tier": {1: 1, 2: 3, 3: 8},
+    },
     "apm_coverage": {
         "ai_adjacent_patterns": [
             "*llm*", "*gpt*", "*ai*", "*rag*", "*agent*", "*inference*", "*model*",

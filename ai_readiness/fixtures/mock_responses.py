@@ -76,6 +76,11 @@ NONE = {
     "ai_agent_tracing.vector_search": _nrql_results([{"count": 0}]),
     "ai_agent_tracing.genai_retrieval": _nrql_results([{"count": 0}]),
     "ai_quality_feedback.events": _nrql_results([{"count": 0}]),
+    # human_approval_gates: NONE scenario has zero workflows (see
+    # workflow_automation.workflows below), so fetch_workflows() returns []
+    # and the per-workflow YAML loop never runs -- no yaml:: fixture needed.
+    "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 0}]),
+    "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 0}]),
     "security_vuln.vuln_domain": _entity_count(0),
     "security_vuln.nrai_vuln": _nrql_results([{"count": 0}]),
     "workflow_automation.workflows": _workflows([]),
@@ -83,6 +88,9 @@ NONE = {
     "dashboards_logs.dashboards": _entity_count(0),
     "dashboards_logs.log_volume": _nrql_results([{"GB": 0}]),
     "dashboards_logs.log_entities": _nrql_results([{"uniqueCount.entity.guid": 0}]),
+    "ai_cost_governance.conditions": _alert_conditions([]),
+    "ai_change_tracking.total": _nrql_results([{"count": 0}]),
+    "ai_change_tracking.events": _nrql_results([]),
 }
 
 _PARTIAL_WORKFLOW_NAMES = ["wf-a", "wf-b", "wf-c", "wf-d"]
@@ -132,6 +140,19 @@ PARTIAL = {
     "autopilot.yaml::wf-b": _workflow_yaml("# uses autopilot for RCA\nsteps: []\n"),
     "autopilot.yaml::wf-c": _workflow_yaml("steps:\n  - action: http.post\n"),
     "autopilot.yaml::wf-d": _workflow_yaml("steps:\n  - action: slack.chat.postMessage\n"),
+    # human_approval_gates: wf-a/wf-c take an action AND are gated, wf-b takes
+    # an action with no gate, wf-d takes no action at all -> 2 of 3
+    # action-taking workflows gated (66.7%).
+    "human_approval_gates.yaml::wf-a": _workflow_yaml(
+        "steps:\n  - action: http.post\n  - action: slack.chat.getReactions\n"
+    ),
+    "human_approval_gates.yaml::wf-b": _workflow_yaml("steps:\n  - action: aws.lambda.invoke\n"),
+    "human_approval_gates.yaml::wf-c": _workflow_yaml(
+        "steps:\n  - action: http.post\n  - name: waitForApproval\n"
+    ),
+    "human_approval_gates.yaml::wf-d": _workflow_yaml("steps:\n  - action: slack.chat.postMessage\n"),
+    "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 1}]),
+    "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 2}]),
     "alerting_anomaly.conditions": _alert_conditions(
         [
             {"id": str(i), "name": f"condition-{i}", "enabled": True,
@@ -142,6 +163,28 @@ PARTIAL = {
     "dashboards_logs.dashboards": _entity_count(4),
     "dashboards_logs.log_volume": _nrql_results([{"GB": 45}]),
     "dashboards_logs.log_entities": _nrql_results([{"uniqueCount.entity.guid": 15}]),
+    "ai_cost_governance.conditions": _alert_conditions(
+        [
+            {"id": "c1", "name": "token spend spike", "enabled": True,
+             "nrql": {"query": "SELECT sum(response.usage.total_tokens) FROM LlmChatCompletionSummary"}},
+            {"id": "c2", "name": "generic-error-rate", "enabled": True,
+             "nrql": {"query": "SELECT count(*) FROM Transaction WHERE error IS true"}},
+            {"id": "c3", "name": "llm cost budget", "enabled": True,
+             "nrql": {"query": "SELECT sum(costUsd) FROM CostSample"}},
+            {"id": "c4", "name": "checkout latency", "enabled": True,
+             "nrql": {"query": "SELECT average(duration) FROM Transaction"}},
+        ]
+    ),
+    "ai_change_tracking.total": _nrql_results([{"count": 5}]),
+    "ai_change_tracking.events": _nrql_results(
+        [
+            {"description": "Bumped gpt-4o-mini to gpt-4.1-mini for the recommender prompt"},
+            {"description": "Updated system prompt for support-triage model"},
+            {"description": "Restarted billing-service pod after OOM"},
+            {"description": "Rotated database credentials"},
+            {"description": "Scaled up checkout-service replicas"},
+        ]
+    ),
 }
 
 _MATURE_WORKFLOW_NAMES = [f"wf-{i}" for i in range(1, 8)]
@@ -186,6 +229,17 @@ MATURE = {
         )
         for i, n in enumerate(_MATURE_WORKFLOW_NAMES)
     },
+    # human_approval_gates: every workflow both takes an action and is gated
+    # -> 100% coverage, guaranteeing tier 3 (keeps the "mature = all
+    # Optimized" invariant intact).
+    **{
+        f"human_approval_gates.yaml::{n}": _workflow_yaml(
+            "steps:\n  - action: http.post\n  - action: slack.chat.getReactions\n"
+        )
+        for n in _MATURE_WORKFLOW_NAMES
+    },
+    "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 3}]),
+    "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 2}]),
     "alerting_anomaly.conditions": _alert_conditions(
         [
             {"id": str(i), "name": f"condition-{i}", "enabled": True,
@@ -196,6 +250,35 @@ MATURE = {
     "dashboards_logs.dashboards": _entity_count(8),
     "dashboards_logs.log_volume": _nrql_results([{"GB": 450}]),
     "dashboards_logs.log_entities": _nrql_results([{"uniqueCount.entity.guid": 40}]),
+    "ai_cost_governance.conditions": _alert_conditions(
+        [
+            {"id": "c1", "name": "token spend spike", "enabled": True,
+             "nrql": {"query": "SELECT sum(response.usage.total_tokens) FROM LlmChatCompletionSummary"}},
+            {"id": "c2", "name": "llm cost budget breach", "enabled": True,
+             "nrql": {"query": "SELECT sum(costUsd) FROM CostSample"}},
+            {"id": "c3", "name": "per-model spend anomaly", "enabled": True,
+             "nrql": {"query": "SELECT sum(response.usage.total_tokens) FACET request.model FROM LlmChatCompletionSummary"}},
+            {"id": "c4", "name": "gen_ai usage ceiling", "enabled": True,
+             "nrql": {"query": "SELECT sum(gen_ai.usage.output_tokens) FROM Span"}},
+            {"id": "c5", "name": "checkout latency", "enabled": True,
+             "nrql": {"query": "SELECT average(duration) FROM Transaction"}},
+        ]
+    ),
+    "ai_change_tracking.total": _nrql_results([{"count": 10}]),
+    "ai_change_tracking.events": _nrql_results(
+        [
+            {"description": "Bumped gpt-4o-mini to gpt-4.1-mini for the recommender prompt"},
+            {"description": "Updated system prompt for support-triage model"},
+            {"description": "Rolled back claude model version after eval regression"},
+            {"description": "Added gemini as a fallback provider for the chat model"},
+            {"description": "Tuned gen_ai temperature for the summarizer prompt"},
+            {"description": "Retired legacy llm gateway route"},
+            {"description": "Updated RAG retrieval prompt template"},
+            {"description": "Adjusted gpt model max_tokens setting"},
+            {"description": "Restarted billing-service pod after OOM"},
+            {"description": "Rotated database credentials"},
+        ]
+    ),
 }
 
 SCENARIOS = {"none": NONE, "partial": PARTIAL, "mature": MATURE}

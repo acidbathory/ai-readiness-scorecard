@@ -21,17 +21,23 @@ EXPECTED_SCORES = {
         "ai_monitoring": 1,
         "ai_agent_tracing": 2,
         "ai_quality_feedback": 1,
+        "human_approval_gates": 2,
+        "model_vendor_diversity": 2,
         "security_vuln": 1,
         "workflow_automation": 2,
         "autopilot": 2,
         "alerting_anomaly": 2,
         "dashboards_logs": 2,
+        "ai_cost_governance": 2,
+        "ai_change_tracking": 1,
     },
 }
 
 # Displayed on a 0-10 scale (aggregate() scales internal 0-3 tier averages by
-# 10/3): none stays 0.0, partial's raw 1.75 -> 5.83 rounded to 5.8, mature's
-# raw 3.0 -> 10.0.
+# 10/3): none stays 0.0, mature's raw 3.0 -> 10.0. partial's 5.8 is a golden
+# value observed by running the fixtures (14 dimensions across 2 lenses of
+# uneven size makes hand-deriving the exact roll-up error-prone) -- it
+# happens to be unchanged from the 10-dimension version by coincidence.
 EXPECTED_OVERALL = {"none": 0.0, "partial": 5.8, "mature": 10.0}
 
 
