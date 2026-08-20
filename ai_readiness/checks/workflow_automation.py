@@ -16,9 +16,21 @@ DIMENSION = "workflow_automation"
 LABEL = "Workflow Automation adoption"
 LENS = "ai_for_observability"
 CONFIDENCE = "high"
-REMEDIATION = (
-    "Stand up a Workflow Automation canvas for at least one common incident type "
-    "(e.g. deployment rollback) so alerts can trigger an automated response path."
+REMEDIATION = {
+    0: "No Workflow Automation canvases configured. Start with one: automate the "
+       "response to your highest-volume alert (e.g. a deployment rollback or "
+       "restart-on-crash) using New Relic Workflow Automation.",
+    1: "One canvas exists -- extend automation to your next 2-3 most common "
+       "incident types so on-call isn't manually running repeatable playbooks by hand.",
+    2: "Good canvas coverage -- audit for overlapping/redundant canvases and "
+       "consolidate them, and confirm every P1 alert policy has a corresponding canvas.",
+    3: "Comprehensive automation -- review canvases quarterly against actual "
+       "incident history to prune stale ones and catch new repeatable patterns "
+       "before they become manual toil again.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has `workflow_automation.*` NerdGraph "
+    "permission on this account."
 )
 
 QUERY = """
@@ -75,5 +87,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"total_workflows": len(workflows)},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

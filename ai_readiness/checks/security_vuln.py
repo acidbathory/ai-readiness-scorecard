@@ -15,9 +15,26 @@ DIMENSION = "security_vuln"
 LABEL = "Security / vulnerability-management coverage"
 LENS = "observability_for_ai"
 CONFIDENCE = "unverified"
-REMEDIATION = (
-    "Enable New Relic's vulnerability management (Security RX / IAST) on reporting "
-    "services to get CVE and dependency-risk visibility for the AI workload."
+REMEDIATION = {
+    0: "No vulnerability-management coverage detected. Enable New Relic's "
+       "vulnerability management (Security RX / IAST) on your reporting services to "
+       "get CVE and dependency-risk visibility.",
+    1: "Some vulnerability scanning exists -- expand it to every AI-adjacent "
+       "service. LLM-calling services often pull in fast-moving SDK dependencies "
+       "(OpenAI/LangChain/etc.) with frequent CVEs, so partial coverage there is a "
+       "real gap.",
+    2: "Solid vulnerability coverage -- add alerting specifically on newly-disclosed "
+       "critical/high CVEs in AI SDK dependencies, not just a general feed that's easy "
+       "to tune out.",
+    3: "Mature vulnerability management for standard CVEs. Extend the same rigor to "
+       "LLM-specific risk classes vulnerability scanners don't cover -- prompt "
+       "injection (OWASP LLM01), sensitive info disclosure (LLM06), and supply-chain "
+       "risk in models/plugins (LLM05) -- via the OWASP LLM Top 10 as a checklist.",
+}
+REMEDIATION_UNKNOWN = (
+    "Could not confirm a working vulnerability-management query shape on this "
+    "account -- confirm Security RX / IAST is enabled and the user key has "
+    "permission to read vulnerability data before trusting an Absent result here."
 )
 
 VULN_DOMAIN_QUERY = """
@@ -76,7 +93,7 @@ def run(ctx):
             evidence=evidence,
             raw_metrics={},
             error="both candidate queries failed",
-            remediation=REMEDIATION,
+            remediation=REMEDIATION_UNKNOWN,
         )
 
     score = tier_from_count(count, thresholds["min_scanned_entities_for_tier"])
@@ -93,5 +110,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"scanned_count": count, "source": source},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

@@ -12,9 +12,20 @@ DIMENSION = "alerting_anomaly"
 LABEL = "Alerting & anomaly-detection coverage"
 LENS = "ai_for_observability"
 CONFIDENCE = "high"
-REMEDIATION = (
-    "Add NRQL alert conditions -- including baseline/anomaly-detection type "
-    "conditions -- for the AI workload's key signals (latency, error rate, token cost)."
+REMEDIATION = {
+    0: "No alert conditions configured. Start with NRQL alert conditions on the AI "
+       "workload's key signals: LLM error rate, p95 latency, and token cost per hour.",
+    1: "A few alerts exist -- add baseline/anomaly-detection type conditions (not "
+       "just static thresholds) for signals with natural daily/weekly seasonality, "
+       "like request volume.",
+    2: "Good alert coverage -- verify every condition routes to a real notification "
+       "channel and has actually fired at least once in testing, not just been "
+       "created and forgotten.",
+    3: "Comprehensive alerting -- periodically prune conditions that haven't fired "
+       "in 90+ days, or tune ones that fire too often (a real alert-fatigue risk).",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has `alerts` NerdGraph read permission on this account."
 )
 
 QUERY = """
@@ -64,5 +75,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"enabled_conditions": len(enabled), "anomaly_like_conditions": len(anomaly_like)},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

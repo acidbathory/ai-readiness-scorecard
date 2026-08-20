@@ -29,7 +29,10 @@ EXPECTED_SCORES = {
     },
 }
 
-EXPECTED_OVERALL = {"none": 0.0, "partial": 1.75, "mature": 3.0}
+# Displayed on a 0-10 scale (aggregate() scales internal 0-3 tier averages by
+# 10/3): none stays 0.0, partial's raw 1.75 -> 5.83 rounded to 5.8, mature's
+# raw 3.0 -> 10.0.
+EXPECTED_OVERALL = {"none": 0.0, "partial": 5.8, "mature": 10.0}
 
 
 def run_all(scenario):

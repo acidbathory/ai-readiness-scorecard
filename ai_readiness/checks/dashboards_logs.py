@@ -14,9 +14,23 @@ DIMENSION = "dashboards_logs"
 LABEL = "Dashboard & log coverage"
 LENS = "ai_for_observability"
 CONFIDENCE = "high"
-REMEDIATION = (
-    "Build a single-pane dashboard covering the AI workload and confirm logs are "
-    "flowing at a meaningful volume, not just a handful of test events."
+REMEDIATION = {
+    0: "No dashboards or meaningful log volume detected. Build one single-pane "
+       "dashboard covering the AI workload's golden signals, and confirm logs are "
+       "actually being forwarded (check the log forwarder/agent config).",
+    1: "Dashboards or log volume exist but not both at a meaningful level -- check "
+       "the evidence above for which one is missing and fix that first, since this "
+       "dimension needs both to score above Ad hoc.",
+    2: "Solid dashboard/log coverage -- add a saved view or alert for log-based "
+       "error patterns specific to the AI workload (e.g. rate-limit errors, "
+       "context-length-exceeded errors).",
+    3: "Mature observability hygiene -- periodically audit dashboards for "
+       "staleness (unused widgets, queries broken by a schema change) rather than "
+       "letting them accumulate indefinitely.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has entitySearch and NRQL read permission on "
+    "this account for DASHBOARD entities and Log data."
 )
 
 DASHBOARDS_QUERY = """
@@ -83,5 +97,5 @@ def run(ctx):
             "log_gb_per_day": round(gb_per_day, 3),
             "log_entity_count": log_entity_count,
         },
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

@@ -37,7 +37,7 @@ class TestRenderHtml(unittest.TestCase):
             self.assertIn(_escape(r.remediation), self.html)
 
     def test_contains_overall_score_and_lens_averages(self):
-        self.assertIn(f"{self.agg['overall_score']} / 3", self.html)
+        self.assertIn(f"{self.agg['overall_score']} / 10", self.html)
         for lens_key, score in self.agg["lens_scores"].items():
             self.assertIn(str(score), self.html)
 

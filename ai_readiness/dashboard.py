@@ -47,8 +47,8 @@ def _executive_summary_markdown(agg, meta):
         f"**Lookback:** {meta.get('lookback_days')} days"
         + (f"  \n**Generated:** {meta['generated_at']}" if meta.get("generated_at") else "")
     )
-    lines.append(f"\n### Overall score: {agg['overall_score']} / 3\n")
-    lines.append("| Lens | Average score |")
+    lines.append(f"\n### Overall score: {agg['overall_score']} / 10\n")
+    lines.append("| Lens | Average score (/10) |")
     lines.append("|---|---|")
     for lens_key, lens_label in config_module.LENS_LABELS.items():
         score = agg["lens_scores"].get(lens_key)

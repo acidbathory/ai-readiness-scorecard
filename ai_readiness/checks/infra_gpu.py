@@ -13,10 +13,22 @@ DIMENSION = "infra_gpu"
 LABEL = "Infra coverage, incl. GPU visibility"
 LENS = "observability_for_ai"
 CONFIDENCE = "high"
-REMEDIATION = (
-    "Deploy the New Relic Infrastructure agent on GPU hosts and confirm GPU "
-    "utilization metrics are reporting (e.g. via the NVIDIA/DCGM integration) so "
-    "GPU capacity is visible alongside general infra."
+REMEDIATION = {
+    0: "Install the New Relic Infrastructure agent on your compute hosts. If you run "
+       "GPU workloads, also add the NVIDIA DCGM integration (`nri-gpu`) so GPU "
+       "utilization reports alongside CPU/memory.",
+    1: "Infra hosts are reporting but GPU metrics aren't -- confirm the DCGM "
+       "exporter is running on every GPU host and that `nri-gpu` is enabled in the "
+       "Infrastructure agent config, not just installed.",
+    2: "GPU visibility is decent -- add alert conditions on GPU memory/utilization "
+       "saturation so capacity issues surface before they cause LLM inference latency spikes.",
+    3: "Maintain GPU fleet visibility; correlate GPU utilization with LLM request "
+       "volume/token throughput to right-size instance types per model rather than "
+       "over-provisioning by default.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has entitySearch and NRQL read permission on "
+    "this account for INFRA-domain entities."
 )
 
 HOSTS_QUERY = """
@@ -72,5 +84,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"host_count": host_count, "gpu_host_count": gpu_host_count},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

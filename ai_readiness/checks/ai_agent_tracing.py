@@ -28,9 +28,22 @@ DIMENSION = "ai_agent_tracing"
 LABEL = "AI agent tool-call & retrieval (RAG) tracing"
 LENS = "observability_for_ai"
 CONFIDENCE = "high"
-REMEDIATION = (
-    "Instrument agent tool-calls and retrieval/vector-search steps (not just "
-    "top-level chat completions) so multi-step AI behavior is traceable end to end."
+REMEDIATION = {
+    0: "No tool-call/agent-step tracing detected. If your AI workload uses "
+       "function-calling or tool use, instrument it so each invocation emits a span "
+       "-- New Relic's AI Monitoring captures this automatically for supported SDKs; "
+       "OTel-based agents need `gen_ai.execute_tool` spans from a library like OpenLLMetry.",
+    1: "Some tool-call tracing exists -- extend it to every agent/tool in the "
+       "pipeline, not just one, so a multi-step agent run is fully visible end to end.",
+    2: "Tool-call tracing is solid; add retrieval/RAG span instrumentation too "
+       "(currently evidence-only above) so vector-search steps are traceable "
+       "alongside tool calls, not just chat completions.",
+    3: "Comprehensive agent tracing -- add span-level latency budgets/alerts per "
+       "tool so a slow tool call (not just a slow LLM call) pages the right team.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has NRQL read permission on this account for "
+    "`LlmTool` and `Span` event types."
 )
 
 NRQL_QUERY = """
@@ -83,5 +96,5 @@ def run(ctx):
             "vector_search_count": vector_search_count,
             "genai_retrieval_count": genai_retrieval_count,
         },
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

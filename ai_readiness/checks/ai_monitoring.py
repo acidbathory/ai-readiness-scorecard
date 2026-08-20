@@ -39,9 +39,25 @@ DIMENSION = "ai_monitoring"
 LABEL = "AI Monitoring / LLM span coverage"
 LENS = "observability_for_ai"
 CONFIDENCE = "medium"
-REMEDIATION = (
-    "Enable New Relic AI Monitoring (or OTel GenAI auto-instrumentation) on "
-    "LLM-calling services to start capturing prompt/response, token, and cost telemetry."
+REMEDIATION = {
+    0: "No LLM telemetry detected via either path. Enable AI Monitoring in your New "
+       "Relic APM agent config (`ai_monitoring.enabled: true`), or add OpenTelemetry "
+       "GenAI auto-instrumentation (e.g. OpenLLMetry) pointing its OTLP exporter at "
+       "New Relic's endpoint.",
+    1: "LLM calls are visible but coverage or token-tracking is thin -- instrument "
+       "every service that calls an LLM (not just one), and confirm your agent/SDK "
+       "version captures `response.usage.*` / `gen_ai.usage.*` token fields (upgrade "
+       "it if not).",
+    2: "Coverage is good -- close the remaining token/cost visibility gap so every "
+       "call reports prompt/completion/total tokens, enabling accurate per-model cost "
+       "dashboards.",
+    3: "Strong LLM telemetry on both paths. If the PII note above is nonzero, confirm "
+       "raw prompt/completion content capture is an intentional, reviewed decision "
+       "(e.g. set `TRACELOOP_TRACE_CONTENT=false` if it isn't).",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has NRQL read permission on this account, and "
+    "that `LlmChatCompletionSummary` / `Span` event types are queryable."
 )
 
 NRQL_QUERY = """
@@ -141,5 +157,5 @@ def run(ctx):
             "genai_token_visibility_pct": round(genai_token_pct, 1),
             "content_capture_span_count": content_capture_count,
         },
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

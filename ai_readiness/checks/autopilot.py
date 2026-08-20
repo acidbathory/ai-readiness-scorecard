@@ -16,9 +16,21 @@ DIMENSION = "autopilot"
 LABEL = "Autopilot usage within Workflow Automation"
 LENS = "ai_for_observability"
 CONFIDENCE = "medium"
-REMEDIATION = (
-    "Add an Autopilot investigation step to existing Workflow Automation canvases "
-    "so incidents get an AI-generated root-cause summary before a human is paged."
+REMEDIATION = {
+    0: "No canvases invoke Autopilot. Add a `newrelic.autopilot.run` action step to "
+       "your Workflow Automation canvases so incidents get an AI-generated "
+       "root-cause summary before a human is paged.",
+    1: "Autopilot is used in one canvas -- extend it to your other Workflow "
+       "Automation canvases so every automated investigation benefits from AI-assisted RCA.",
+    2: "Autopilot adoption is solid -- periodically spot-check a sample of past "
+       "runs for investigation quality/accuracy rather than assuming it's always right.",
+    3: "Mature Autopilot usage -- feed its investigation outputs back as training/eval "
+       "data for the AI quality & feedback-loop dimension above, closing the loop.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has `workflow_automation.*` NerdGraph "
+    "permission on this account -- this check depends on workflow_automation's "
+    "own fetch succeeding first."
 )
 
 YAML_QUERY = """
@@ -72,5 +84,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"autopilot_workflows": matched, "total_workflows": len(workflows)},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

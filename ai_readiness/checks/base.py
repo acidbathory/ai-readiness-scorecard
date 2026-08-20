@@ -45,5 +45,8 @@ def run_check(check_module, ctx):
             tier=config_module.UNKNOWN_TIER_LABEL,
             evidence=f"Check failed: {exc}",
             error=str(exc),
-            remediation=getattr(check_module, "REMEDIATION", ""),
+            remediation=getattr(
+                check_module, "REMEDIATION_UNKNOWN",
+                "Investigate why this check failed and fix the query/permissions.",
+            ),
         )

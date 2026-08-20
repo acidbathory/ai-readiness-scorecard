@@ -24,9 +24,17 @@ python3 -m ai_readiness --report html --report-file scorecard.html
 Or install it as a real command: `pip install -e . && ai-readiness --mock`. `make setup`,
 `make test`, `make demo` also work — see the [Makefile](Makefile).
 
+Progress for each dimension prints to stderr as it runs (useful since a live scan makes many
+sequential NerdGraph/NRQL calls and can take a while — `autopilot` alone can be 50+ calls on an
+account with many Workflow Automation canvases). Pass `--quiet`/`-q` to suppress it.
+
 ## What it scores
 
-Two lenses, 10 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**:
+Two lenses, 10 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**. Lens and
+overall scores are displayed on a **0-10 scale** (the 4 internal tiers are what's actually
+measured; 0-10 is just the display convention for the roll-up numbers). Each dimension's
+remediation text is tier-specific — a concrete next step to move up a level, not one generic
+sentence regardless of where you're starting from.
 
 | Lens | Dimension | Confidence | Signal |
 |---|---|---|---|

@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import sys
+import time
 
 from . import config as config_module
 from .checks import ALL_CHECKS, CHECKS_BY_DIMENSION
@@ -37,6 +38,9 @@ def build_arg_parser():
                         help="print all dimensions with their confidence level and exit")
     scope.add_argument("--config", default=None, metavar="PATH",
                         help="JSON file of scoring-threshold overrides, deep-merged onto the defaults")
+
+    scope.add_argument("--quiet", "-q", action="store_true",
+                        help="suppress per-check progress lines (still prints the final result)")
 
     mock = p.add_argument_group("mock mode (no credentials needed)")
     mock.add_argument("--mock", action="store_true",
@@ -125,7 +129,21 @@ def main(argv=None):
     ctx = Context(gql=gql, account_id=account_id, lookback_days=lookback_days, config=thresholds)
 
     checks = select_checks(args.only)
-    results = [run_check(c, ctx) for c in checks]
+    if not args.quiet:
+        mode = f"mock ({args.mock_scenario})" if args.mock else f"live account {account_id} ({region})"
+        print(f"Scoring {mode}, lookback {lookback_days}d, {len(checks)} dimension(s)...", file=sys.stderr)
+
+    results = []
+    for i, c in enumerate(checks, 1):
+        if not args.quiet:
+            print(f"  [{i}/{len(checks)}] {c.DIMENSION} ({c.LABEL})...", file=sys.stderr)
+        started = time.monotonic()
+        result = run_check(c, ctx)
+        results.append(result)
+        if not args.quiet:
+            elapsed = time.monotonic() - started
+            print(f"  [{i}/{len(checks)}] {c.DIMENSION}: {result.tier} ({elapsed:.1f}s)", file=sys.stderr)
+
     agg = aggregate(results)
     meta = {
         "account_id": account_id,

@@ -18,10 +18,23 @@ DIMENSION = "ai_quality_feedback"
 LABEL = "AI quality & feedback-loop coverage"
 LENS = "observability_for_ai"
 CONFIDENCE = "unverified"
-REMEDIATION = (
-    "Capture feedback on AI outputs (thumbs up/down, human review, or an "
-    "LLM-as-judge score) and send it via New Relic's LLM feedback API so quality "
-    "issues surface as data, not anecdotes."
+REMEDIATION = {
+    0: "No AI output feedback captured. Start simple: add a thumbs up/down on AI "
+       "responses in your product UI and send it to New Relic via the LLM feedback "
+       "API (`recordLlmFeedbackEvent` or your SDK's equivalent).",
+    1: "Feedback capture exists but is sparse -- increase coverage (sample a higher "
+       "% of responses) or add automatic LLM-as-judge scoring for responses with no "
+       "human feedback.",
+    2: "Feedback volume is solid -- start correlating scores against `request.model` "
+       "/ prompt version so a regression in one specific model or prompt is catchable, "
+       "not hidden inside an aggregate average.",
+    3: "Mature feedback loop -- gate prompt/model changes on a regression test suite "
+       "(e.g. a promptfoo-style CI eval) before they ship, using this feedback data as "
+       "the baseline.",
+}
+REMEDIATION_UNKNOWN = (
+    "Confirm the New Relic user key has NRQL read permission on this account and "
+    "that the `LlmFeedbackMessage` event type is queryable."
 )
 
 NRQL_QUERY = """
@@ -58,7 +71,7 @@ def run(ctx):
             ),
             raw_metrics={},
             error=str(exc),
-            remediation=REMEDIATION,
+            remediation=REMEDIATION_UNKNOWN,
         )
 
     score = tier_from_count(count, thresholds["min_feedback_events_for_tier"])
@@ -73,5 +86,5 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={"feedback_event_count": count},
-        remediation=REMEDIATION,
+        remediation=REMEDIATION[score],
     )

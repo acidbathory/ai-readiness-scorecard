@@ -53,18 +53,21 @@ class TestAggregate(unittest.TestCase):
             self._result("b", "observability_for_ai", 3),
             self._result("c", "ai_for_observability", 2),
         ]
+        # raw tier average is 2.0/2.0/2.0 (out of 3); aggregate() displays on
+        # a 0-10 scale: 2.0 * 10/3 = 6.67, rounded to 1dp.
         agg = aggregate(results)
-        self.assertEqual(agg["lens_scores"]["observability_for_ai"], 2.0)
-        self.assertEqual(agg["lens_scores"]["ai_for_observability"], 2.0)
-        self.assertEqual(agg["overall_score"], 2.0)
+        self.assertEqual(agg["lens_scores"]["observability_for_ai"], 6.7)
+        self.assertEqual(agg["lens_scores"]["ai_for_observability"], 6.7)
+        self.assertEqual(agg["overall_score"], 6.7)
 
     def test_failed_check_excluded_from_average(self):
         results = [
             self._result("a", "observability_for_ai", 3),
             self._result("b", "observability_for_ai", None),
         ]
+        # raw average is 3.0/3.0 (the None-score check is excluded) -> 10.0/10.
         agg = aggregate(results)
-        self.assertEqual(agg["lens_scores"]["observability_for_ai"], 3.0)
+        self.assertEqual(agg["lens_scores"]["observability_for_ai"], 10.0)
 
     def test_empty_results(self):
         agg = aggregate([])
