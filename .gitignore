@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+out/
+*.egg-info/
+build/
+dist/
+ai_readiness_report.html
+

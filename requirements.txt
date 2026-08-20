@@ -1,0 +1,3 @@
+# Intentionally empty: this tool is stdlib-only Python (urllib.request,
+# argparse, json, unittest) so it runs on any machine with Python 3.9+
+# and no pip install step -- matches continental-demo's portability goal.

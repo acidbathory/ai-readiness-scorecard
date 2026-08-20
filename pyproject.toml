@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-readiness-scorecard"
+version = "0.1.0"
+description = "Scores a New Relic account's AI readiness across 10 dimensions, via NerdGraph."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Internal use" }
+dependencies = []
+
+[project.scripts]
+ai-readiness = "ai_readiness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ai_readiness*"]
