@@ -32,8 +32,8 @@ Two lenses, 10 dimensions, each tiered **Absent → Ad hoc → Managed → Optim
 |---|---|---|---|
 | Observability for AI | `apm_coverage` | high | APM services with AI-adjacent names |
 | | `infra_gpu` | high | Infra hosts + GPU utilization metrics |
-| | `ai_monitoring` | medium | LLM generation events + token/cost visibility |
-| | `ai_agent_tracing` | high | Tool-call & RAG/retrieval span tracing |
+| | `ai_monitoring` | medium | LLM generation events + token/cost visibility (NR *and* OTel GenAI paths) |
+| | `ai_agent_tracing` | high | Tool-call & RAG/retrieval span tracing (NR *and* OTel GenAI paths) |
 | | `ai_quality_feedback` | unverified | AI output feedback/eval scoring |
 | | `security_vuln` | unverified | Vulnerability-management coverage |
 | AI for Observability | `workflow_automation` | high | Workflow Automation canvases configured |
@@ -48,6 +48,17 @@ The three AI-specific dimensions (`ai_monitoring`, `ai_agent_tracing`, `ai_quali
 are modeled on what mature open-source LLM observability tools (Langfuse, in particular) treat
 as signals of a mature setup — not just "some LLM call happened," but token/cost visibility,
 tool-call/agent-step tracing, retrieval tracing, and feedback scoring.
+
+`ai_monitoring` and `ai_agent_tracing` each check **two independent telemetry paths and take
+whichever is stronger**: New Relic's own `Llm*` custom events, and OpenTelemetry's GenAI
+semantic-convention `gen_ai.*` attributes on plain `Span` events (emitted by backend-agnostic
+OTel instrumentation like OpenLLMetry/Traceloop). An account using only one path still scores
+correctly. `ai_monitoring` also flags — as evidence, not a score penalty — whether raw
+prompt/completion content is being captured into spans (`gen_ai.prompt`/`gen_ai.input.messages`),
+since OpenLLMetry captures that content **by default**; worth a PII/data-governance conversation
+if it's nonzero. Note: the `gen_ai.*` convention itself is still spec-flagged *Development*
+status, not Stable — expect attribute renames over time (`gen_ai.system` → `gen_ai.provider.name`
+already happened in v1.37.0).
 
 ## Confidence legend
 
@@ -133,3 +144,6 @@ and one registry line, nothing else changes.
   ambiguous (real Absent vs. a wrong filter value silently matching nothing).
 - Confirm `ai_quality_feedback`'s `LlmFeedbackMessage` event type against an account that
   actually captures AI output feedback — every account tested so far has zero.
+- Watch for OTel GenAI attribute renames (`gen_ai.system` → `gen_ai.provider.name` already
+  happened) and add the new name alongside the old one rather than replacing it outright, since
+  older instrumentation will keep emitting the deprecated name for a while.

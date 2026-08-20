@@ -2,14 +2,33 @@
 LlmChatCompletionSummary, LlmEmbedding` -- run live against a real account
 (2026-08-20) that confirmed `LlmChatCompletionSummary` is the real, heavily
 populated event type (`LlmCompletion` and `LlmEmbedding` were both zero on
-that account and dropped from the query). Bumped from unverified to medium,
-not high: confirmed against one live account, not yet a proven pattern
-across multiple engagements.
+that account and dropped from the query). The token/cost visibility
+sub-signal (Langfuse's "generation cost & token tracking" concept) is
+likewise confirmed real: `response.usage.{prompt,completion,total}_tokens`
+and `request.model`/`vendor` were confirmed present via a live `SELECT
+keyset()` on the same account.
 
-The token/cost visibility sub-signal (Langfuse's "generation cost & token
-tracking" concept) is new: `response.usage.{prompt,completion,total}_tokens`
-and `request.model`/`vendor` were confirmed present as real attributes on
-`LlmChatCompletionSummary` via a live `SELECT keyset()` on the same account.
+Second detection path added the same day, after researching OpenTelemetry's
+GenAI semantic conventions (as implemented by OpenLLMetry/Traceloop, a
+backend-agnostic OTel SDK -- New Relic is just one of ~20 tested
+destinations): an account instrumented via generic OTel GenAI
+auto-instrumentation instead of New Relic's own AI Monitoring agent hooks
+emits `gen_ai.*` attributes on plain `Span` events -- a genuinely separate
+telemetry path, confirmed live on the same account (`gen_ai.request.model`:
+2.5M+ spans, `gen_ai.usage.{input,output}_tokens`: 1.2M+) -- and could show
+ZERO `Llm*` custom events while still being fully instrumented. Both paths
+are computed independently and combined via max: either one proves
+readiness, neither is required.
+
+Still MEDIUM, not HIGH: confirmed against one live account, and the OTel
+`gen_ai.*` convention itself is spec-flagged **Development** status (not
+Stable) as of this research -- `gen_ai.system` was renamed to
+`gen_ai.provider.name` in v1.37.0 (2025-08-25), so expect further renames.
+
+The content-capture check is a deliberate non-gating evidence flag: OpenLLMetry
+captures raw prompt/completion content into span attributes BY DEFAULT
+(`TRACELOOP_TRACE_CONTENT` defaults to `"true"`) -- a confirmed fact worth
+surfacing as a data-governance/PII note, not a maturity signal either way.
 """
 
 from ..scoring import combine_tiers, tier_from_count
@@ -21,8 +40,8 @@ LABEL = "AI Monitoring / LLM span coverage"
 LENS = "observability_for_ai"
 CONFIDENCE = "medium"
 REMEDIATION = (
-    "Enable New Relic AI Monitoring on LLM-calling services (OpenAI/Bedrock/Azure "
-    "OpenAI SDKs) to start capturing prompt/response, token, and cost telemetry."
+    "Enable New Relic AI Monitoring (or OTel GenAI auto-instrumentation) on "
+    "LLM-calling services to start capturing prompt/response, token, and cost telemetry."
 )
 
 NRQL_QUERY = """
@@ -37,39 +56,73 @@ def _nrql_result(ctx, nrql, fixture_key):
     return data.get("actor", {}).get("account", {}).get("nrql", {}).get("results", [])
 
 
-def run(ctx):
-    thresholds = ctx.config[DIMENSION]
+def _single_value(results, key=None):
+    if not results:
+        return 0
+    return results[0].get(key, 0) if key else next(iter(results[0].values()), 0)
 
-    events_nrql = f"SELECT count(*) FROM LlmChatCompletionSummary SINCE {ctx.lookback_days} days ago"
-    events_results = _nrql_result(ctx, events_nrql, "ai_monitoring.events")
-    event_count = events_results[0].get("count", 0) if events_results else 0
 
-    entities_nrql = (
-        f"SELECT uniqueCount(entity.guid) FROM LlmChatCompletionSummary "
-        f"SINCE {ctx.lookback_days} days ago"
+def _path_tier(ctx, thresholds, from_clause, token_condition, key_prefix):
+    events_results = _nrql_result(
+        ctx, f"SELECT count(*) FROM {from_clause} SINCE {ctx.lookback_days} days ago", f"{key_prefix}.events"
     )
-    entities_results = _nrql_result(ctx, entities_nrql, "ai_monitoring.entities")
-    entity_count = entities_results[0].get("uniqueCount.entity.guid", 0) if entities_results else 0
+    event_count = _single_value(events_results, "count")
 
-    token_nrql = (
-        f"SELECT percentage(count(*), WHERE response.usage.total_tokens IS NOT NULL) "
-        f"FROM LlmChatCompletionSummary SINCE {ctx.lookback_days} days ago"
+    entities_results = _nrql_result(
+        ctx,
+        f"SELECT uniqueCount(entity.guid) FROM {from_clause} SINCE {ctx.lookback_days} days ago",
+        f"{key_prefix}.entities",
     )
-    token_results = _nrql_result(ctx, token_nrql, "ai_monitoring.token_visibility")
-    # NRQL's exact column key for a bare percentage(...) varies by account/API
-    # version -- take the lone value rather than hardcoding a key name.
-    token_visibility_pct = next(iter(token_results[0].values()), 0) if token_results else 0
+    entity_count = _single_value(entities_results, "uniqueCount.entity.guid")
+
+    token_results = _nrql_result(
+        ctx,
+        f"SELECT percentage(count(*), WHERE {token_condition}) FROM {from_clause} "
+        f"SINCE {ctx.lookback_days} days ago",
+        f"{key_prefix}.token_visibility",
+    )
+    token_visibility_pct = _single_value(token_results)
 
     event_tier = tier_from_count(event_count, thresholds["min_events_for_tier"])
     entity_tier = tier_from_count(entity_count, thresholds["min_entities_for_tier"])
     token_tier = tier_from_count(token_visibility_pct, thresholds["min_token_visibility_pct_for_tier"])
-    score = combine_tiers(event_tier, entity_tier, token_tier, method="min")
+    tier = combine_tiers(event_tier, entity_tier, token_tier, method="min")
+    return tier, event_count, entity_count, token_visibility_pct
+
+
+def run(ctx):
+    thresholds = ctx.config[DIMENSION]
+
+    llm_tier, llm_events, llm_entities, llm_token_pct = _path_tier(
+        ctx, thresholds, "LlmChatCompletionSummary", "response.usage.total_tokens IS NOT NULL", "ai_monitoring"
+    )
+    genai_tier, genai_events, genai_entities, genai_token_pct = _path_tier(
+        ctx,
+        thresholds,
+        "Span WHERE gen_ai.request.model IS NOT NULL",
+        "gen_ai.usage.input_tokens IS NOT NULL",
+        "ai_monitoring.genai",
+    )
+    score = combine_tiers(llm_tier, genai_tier, method="max")
+
+    content_capture_results = _nrql_result(
+        ctx,
+        f"SELECT count(*) FROM Span WHERE gen_ai.prompt IS NOT NULL OR gen_ai.input.messages IS NOT NULL "
+        f"SINCE {ctx.lookback_days} days ago",
+        "ai_monitoring.content_capture",
+    )
+    content_capture_count = _single_value(content_capture_results, "count")
 
     evidence = (
-        f"{event_count} LlmChatCompletionSummary events across {entity_count} distinct "
-        f"entities over {ctx.lookback_days}d; {token_visibility_pct:.0f}% carry token/cost "
-        f"usage data (request.model, vendor, response.usage.total_tokens)"
+        f"NR AI Monitoring path: {llm_events} LlmChatCompletionSummary events / {llm_entities} entities / "
+        f"{llm_token_pct:.0f}% with token data. OTel GenAI path: {genai_events} gen_ai.* spans / "
+        f"{genai_entities} entities / {genai_token_pct:.0f}% with token data (over {ctx.lookback_days}d)."
     )
+    if content_capture_count:
+        evidence += (
+            f" NOTE: {content_capture_count} spans capture raw prompt/completion content "
+            f"(gen_ai.prompt / gen_ai.input.messages) -- review for PII handling."
+        )
 
     return CheckResult(
         dimension=DIMENSION,
@@ -80,9 +133,13 @@ def run(ctx):
         tier=config_module.TIER_LABELS[score],
         evidence=evidence,
         raw_metrics={
-            "event_count": event_count,
-            "entity_count": entity_count,
-            "token_visibility_pct": round(token_visibility_pct, 1),
+            "llm_event_count": llm_events,
+            "llm_entity_count": llm_entities,
+            "llm_token_visibility_pct": round(llm_token_pct, 1),
+            "genai_event_count": genai_events,
+            "genai_entity_count": genai_entities,
+            "genai_token_visibility_pct": round(genai_token_pct, 1),
+            "content_capture_span_count": content_capture_count,
         },
         remediation=REMEDIATION,
     )
