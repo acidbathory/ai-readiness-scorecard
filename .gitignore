@@ -8,4 +8,5 @@ build/
 dist/
 ai_readiness_report.html
 scorecard.html
+.DS_Store
 
