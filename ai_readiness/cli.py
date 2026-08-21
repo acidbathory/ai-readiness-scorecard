@@ -1,9 +1,12 @@
 import argparse
 import datetime
+import getpass
 import json
 import os
 import sys
 import time
+import webbrowser
+from pathlib import Path
 
 from . import config as config_module
 from .checks import ALL_CHECKS, CHECKS_BY_DIMENSION
@@ -16,7 +19,7 @@ from .scoring import aggregate
 def build_arg_parser():
     p = argparse.ArgumentParser(
         prog="ai-readiness",
-        description="Score a New Relic account's AI readiness across 10 dimensions.",
+        description="Score a New Relic account's AI readiness across 14 dimensions.",
         epilog="Run with --mock first if you don't have credentials handy yet.",
     )
 
@@ -29,6 +32,9 @@ def build_arg_parser():
                           help="User API key, NRAK-... (default: $NEW_RELIC_USER_KEY)")
     account.add_argument("--lookback-days", type=int, default=None,
                           help="NRQL time window for all checks (default: 30)")
+    account.add_argument("--non-interactive", action="store_true",
+                          help="never prompt for account id/region/user key; fail if one is missing "
+                               "(prompts are skipped automatically when not running in a terminal)")
 
     scope = p.add_argument_group("scope")
     scope.add_argument("--only", default=None, metavar="DIM[,DIM...]",
@@ -57,6 +63,8 @@ def build_arg_parser():
                          help="generate a CIS-benchmark-style HTML leave-behind")
     output.add_argument("--report-file", default="ai_readiness_report.html", metavar="PATH",
                          help="where to write the HTML report")
+    output.add_argument("--no-open", action="store_true",
+                         help="don't automatically open the HTML report in a browser once it's written")
 
     dashboard = p.add_argument_group("New Relic dashboard")
     dashboard.add_argument("--dashboard-dry-run", action="store_true",
@@ -91,6 +99,44 @@ def load_config_overrides(path):
     return config_module.deep_merge(config_module.THRESHOLDS, _int_keys_where_possible(overrides))
 
 
+def _interactive(args):
+    return not args.non_interactive and sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _prompt_region(args):
+    current = args.region or os.environ.get("NEW_RELIC_REGION") or "us"
+    if not _interactive(args):
+        return current
+    raw = input(f"New Relic region (us/eu) [{current}]: ").strip().lower()
+    return raw or current
+
+
+def _prompt_account_id(args):
+    current = args.account_id or int(os.environ.get("NEW_RELIC_ACCOUNT_ID", "0") or 0) or None
+    if not _interactive(args):
+        return current or 0
+    suffix = f" [{current}]" if current else ""
+    while True:
+        raw = input(f"New Relic Account ID{suffix}: ").strip()
+        if not raw:
+            if current:
+                return current
+            print("  Account ID is required.")
+            continue
+        if raw.isdigit():
+            return int(raw)
+        print("  Account ID must be numeric.")
+
+
+def _prompt_api_key(args):
+    env_key = args.api_key or os.environ.get("NEW_RELIC_USER_KEY")
+    if not _interactive(args):
+        return env_key
+    hint = f" [****{env_key[-4:]}] (press Enter to keep)" if env_key else ""
+    raw = getpass.getpass(f"New Relic User Key, NRAK-...{hint}: ").strip()
+    return raw or env_key
+
+
 def select_checks(only):
     if not only:
         return ALL_CHECKS
@@ -109,16 +155,22 @@ def main(argv=None):
             print(f"{c.DIMENSION:22s} [{c.CONFIDENCE:10s}] {c.LABEL}")
         return 0
 
-    account_id = args.account_id or int(os.environ.get("NEW_RELIC_ACCOUNT_ID", "0") or 0)
-    region = args.region or os.environ.get("NEW_RELIC_REGION", "us")
     lookback_days = args.lookback_days or int(
         os.environ.get("AI_READINESS_LOOKBACK_DAYS", config_module.LOOKBACK_DAYS_DEFAULT)
     )
 
     if args.mock:
+        account_id = args.account_id or int(os.environ.get("NEW_RELIC_ACCOUNT_ID", "0") or 0)
+        region = args.region or os.environ.get("NEW_RELIC_REGION", "us")
         gql = make_mock_client(args.mock_scenario)
     else:
-        api_key = args.api_key or os.environ.get("NEW_RELIC_USER_KEY")
+        # Prompts fall back to the existing env/flag value as the default (shown
+        # masked for the key, in full for region/account since those aren't
+        # secret) -- press Enter to keep it, or type a new value to override.
+        # Skipped automatically when not running in an interactive terminal.
+        region = _prompt_region(args)
+        account_id = _prompt_account_id(args)
+        api_key = _prompt_api_key(args)
         if not api_key:
             sys.exit("NEW_RELIC_USER_KEY not set (or pass --api-key). Use --mock to run without a live account.")
         if not account_id:
@@ -166,6 +218,11 @@ def main(argv=None):
         with open(args.report_file, "w") as f:
             f.write(render_html(results, agg, meta))
         print(f"HTML report written to {args.report_file}")
+        if not args.no_open:
+            try:
+                webbrowser.open(Path(args.report_file).resolve().as_uri())
+            except Exception as exc:  # noqa: BLE001 -- opening a browser is a nice-to-have, never fatal
+                print(f"  (couldn't open it automatically: {exc})", file=sys.stderr)
 
     if args.dashboard_dry_run:
         from .dashboard import build_dashboard_payload

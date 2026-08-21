@@ -13,13 +13,31 @@ git clone <this repo> && cd ai-readiness-scorecard
 python3 -m ai_readiness --mock --mock-scenario mature   # no credentials needed
 ```
 
-Against a real account:
+Against a real account, either set up `.env` first:
 
 ```bash
 cp .env.example .env              # fill in NEW_RELIC_USER_KEY, NEW_RELIC_ACCOUNT_ID, NEW_RELIC_REGION
 set -a && source .env && set +a
-python3 -m ai_readiness --report html --report-file scorecard.html
+python3 -m ai_readiness --report html
 ```
+
+...or just run it and answer the prompts — no `.env` required:
+
+```bash
+python3 -m ai_readiness --report html
+# New Relic region (us/eu) [us]:
+# New Relic Account ID:
+# New Relic User Key, NRAK-...:
+```
+
+If a value is already set (via `.env` or a previous prompt in the same shell), the prompt shows
+it as the default — the key is shown masked (`****1a2b`, last 4 characters) so it's confirmable
+without echoing the full secret; press Enter to keep it or type a new value to override. Prompts
+are skipped automatically (falling back to env vars/flags) when not running in an interactive
+terminal — e.g. in CI — or with `--non-interactive`.
+
+The HTML report opens in your default browser automatically once it's written; pass `--no-open`
+to skip that.
 
 Or install it as a real command: `pip install -e . && ai-readiness --mock`. `make setup`,
 `make test`, `make demo` also work — see the [Makefile](Makefile).
