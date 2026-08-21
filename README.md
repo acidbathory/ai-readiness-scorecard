@@ -1,12 +1,36 @@
 # AI Readiness Scorecard
 
+[![tests](https://github.com/acidbathory/ai-readiness-scorecard/actions/workflows/test.yml/badge.svg)](https://github.com/acidbathory/ai-readiness-scorecard/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![python: 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
+
 Scores a New Relic account's AI readiness across **14 dimensions**, via NerdGraph. Produces a
 table, JSON, a CIS-benchmark-style HTML report, and a live dashboard inside New Relic itself.
 
-Zero dependencies — stdlib-only Python, nothing to `pip install` unless you want the packaged
-`ai-readiness` command.
+**Requirements:** Python 3.9 or later. Nothing else — no `pip install`, no external
+dependencies, no config file needed to get started. Runs anywhere Python runs (macOS, Linux,
+Windows). The packaged `ai-readiness` command is *optional* and is the only thing that needs
+`pip install -e .`.
 
-## Quick start (real account — this is the actual point of the tool)
+No New Relic account handy? Jump to the **No account yet** section below — `--mock` runs the
+whole tool offline against fixture data in seconds.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [What it scores](#what-it-scores)
+- [Confidence legend](#confidence-legend)
+- [Deliverables](#deliverables)
+- [Using this for a new customer](#using-this-for-a-new-customer)
+- [Tests](#tests)
+- [Architecture, in one paragraph](#architecture-in-one-paragraph)
+- [What's next](#whats-next)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Quick start
+
+Real account — this is the actual point of the tool.
 
 ```bash
 git clone <this repo> && cd ai-readiness-scorecard
@@ -39,10 +63,14 @@ python3 -m ai_readiness --report html
 ```
 
 Or install it as a real command: `pip install -e . && ai-readiness --report html`. `make setup`,
-`make test`, `make demo` also work — see the [Makefile](Makefile).
+`make test`, `make demo` also work — see the [Makefile](Makefile). (If the editable install
+fails with an error about `setup.py`/`setup.cfg`, your `pip` is too old for PEP 660 editable
+installs — run `python3 -m pip install --upgrade pip` first.)
 
-**No New Relic account handy yet?** `--mock` runs against canned fixture data instead of a real
-account — useful for trying the tool's shape, but **every number it produces is fake**. Both the
+### No account yet
+
+`--mock` runs against canned fixture data instead of a real account — useful for trying the
+tool's shape, but **every number it produces is fake**. Both the
 terminal output and the HTML report print an unmissable "MOCK DATA" warning whenever `--mock` is
 used, specifically so a demo run is never mistaken for a real result:
 
@@ -200,3 +228,20 @@ and one registry line, nothing else changes.
 - Watch for OTel GenAI attribute renames (`gen_ai.system` → `gen_ai.provider.name` already
   happened) and add the new name alongside the old one rather than replacing it outright, since
   older instrumentation will keep emitting the deprecated name for a while.
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a PR:
+
+```bash
+make test    # or: python3 -m unittest discover tests
+```
+
+CI runs the same suite on Python 3.9 and 3.12 for every push and PR (see
+[.github/workflows/test.yml](.github/workflows/test.yml)). Each dimension lives in its own
+`ai_readiness/checks/*.py` file — adding a new one means adding one file and one registry line
+in [`ai_readiness/checks/__init__.py`](ai_readiness/checks/__init__.py), nothing else changes.
+
+## License
+
+[MIT](LICENSE) — use it, fork it, ship it.
