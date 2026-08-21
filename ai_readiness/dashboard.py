@@ -42,6 +42,12 @@ def _md_escape_pipe(text):
 
 def _executive_summary_markdown(agg, meta):
     lines = ["## AI Readiness Scorecard"]
+    if meta.get("mock"):
+        lines.append(
+            "⚠️ **MOCK DATA -- not a real account.** Every number here is canned fixture "
+            "data; this payload was built with `--mock` and should never be deployed as if it "
+            "reflects a real customer.\n"
+        )
     lines.append(
         f"**Account:** {meta.get('account_id')} ({meta.get('region')})  \n"
         f"**Lookback:** {meta.get('lookback_days')} days"

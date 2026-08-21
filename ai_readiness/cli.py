@@ -181,6 +181,12 @@ def main(argv=None):
     ctx = Context(gql=gql, account_id=account_id, lookback_days=lookback_days, config=thresholds)
 
     checks = select_checks(args.only)
+    if args.mock:
+        print(
+            f"*** MOCK DATA ({args.mock_scenario}) -- not a real account. "
+            f"Remove --mock to score a real New Relic account. ***",
+            file=sys.stderr,
+        )
     if not args.quiet:
         mode = f"mock ({args.mock_scenario})" if args.mock else f"live account {account_id} ({region})"
         print(f"Scoring {mode}, lookback {lookback_days}d, {len(checks)} dimension(s)...", file=sys.stderr)

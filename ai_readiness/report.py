@@ -7,8 +7,16 @@ from . import config as config_module
 from .scoring import tier_index_from_score
 
 
+MOCK_BANNER_TEXT = "MOCK DATA -- not a real account. Every number below is canned fixture data; remove --mock to score a real New Relic account."
+
+
 def render_table(results, agg, meta):
     lines = []
+    if meta.get("mock"):
+        lines.append("*" * len(MOCK_BANNER_TEXT))
+        lines.append(MOCK_BANNER_TEXT)
+        lines.append("*" * len(MOCK_BANNER_TEXT))
+        lines.append("")
     lines.append(
         f"AI Readiness Scorecard -- account {meta['account_id']} ({meta['region']}), "
         f"lookback {meta['lookback_days']}d"
@@ -189,9 +197,12 @@ def render_html(results, agg, meta):
              border-radius: 0 10px 10px 0; padding: 0.65rem 0.9rem; font-size: 0.9rem; line-height: 1.45; }}
   .action-icon {{ flex-shrink: 0; font-size: 0.6rem; padding-top: 0.35rem; opacity: 0.8; }}
   .legend {{ color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); padding-top: 1.2rem; margin-top: 2.5rem; }}
+  .mock-banner {{ background: var(--red); color: var(--bg); font-weight: 800; text-align: center;
+                  padding: 0.6rem 1rem; border-radius: 10px; margin-bottom: 1.5rem; letter-spacing: 0.02em; }}
 </style>
 </head>
 <body>
+  {f'<div class="mock-banner">&#9888; {_escape(MOCK_BANNER_TEXT)}</div>' if meta.get('mock') else ''}
   <h1>AI Readiness Scorecard</h1>
   <div class="meta">
     Account {_escape(meta.get('account_id'))} ({_escape(meta.get('region'))}) &middot;

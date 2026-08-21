@@ -6,14 +6,31 @@ table, JSON, a CIS-benchmark-style HTML report, and a live dashboard inside New 
 Zero dependencies — stdlib-only Python, nothing to `pip install` unless you want the packaged
 `ai-readiness` command.
 
-## Quick start
+## Quick start (real account — this is the actual point of the tool)
 
 ```bash
 git clone <this repo> && cd ai-readiness-scorecard
-python3 -m ai_readiness --mock --mock-scenario mature   # no credentials needed
+python3 -m ai_readiness --report html
 ```
 
-Against a real account, either set up `.env` first:
+That's it — no setup file required. It prompts for what it needs:
+
+```
+New Relic region (us/eu) [us]:
+New Relic Account ID:
+New Relic User Key, NRAK-...:
+```
+
+If a value is already available (via `.env`, an env var, or a previous prompt in the same
+shell), the prompt shows it as the default — the key is shown masked (`****1a2b`, last 4
+characters) so it's confirmable without echoing the full secret; press Enter to keep it or type
+a new value to override. Prompts are skipped automatically (falling back to env vars/flags)
+when not running in an interactive terminal — e.g. in CI — or with `--non-interactive`.
+
+The HTML report opens in your default browser automatically once it's written; pass `--no-open`
+to skip that.
+
+Prefer not to be prompted every run? Set up `.env` once instead:
 
 ```bash
 cp .env.example .env              # fill in NEW_RELIC_USER_KEY, NEW_RELIC_ACCOUNT_ID, NEW_RELIC_REGION
@@ -21,26 +38,17 @@ set -a && source .env && set +a
 python3 -m ai_readiness --report html
 ```
 
-...or just run it and answer the prompts — no `.env` required:
+Or install it as a real command: `pip install -e . && ai-readiness --report html`. `make setup`,
+`make test`, `make demo` also work — see the [Makefile](Makefile).
+
+**No New Relic account handy yet?** `--mock` runs against canned fixture data instead of a real
+account — useful for trying the tool's shape, but **every number it produces is fake**. Both the
+terminal output and the HTML report print an unmissable "MOCK DATA" warning whenever `--mock` is
+used, specifically so a demo run is never mistaken for a real result:
 
 ```bash
-python3 -m ai_readiness --report html
-# New Relic region (us/eu) [us]:
-# New Relic Account ID:
-# New Relic User Key, NRAK-...:
+python3 -m ai_readiness --mock --mock-scenario mature   # fake "everything is perfect" data
 ```
-
-If a value is already set (via `.env` or a previous prompt in the same shell), the prompt shows
-it as the default — the key is shown masked (`****1a2b`, last 4 characters) so it's confirmable
-without echoing the full secret; press Enter to keep it or type a new value to override. Prompts
-are skipped automatically (falling back to env vars/flags) when not running in an interactive
-terminal — e.g. in CI — or with `--non-interactive`.
-
-The HTML report opens in your default browser automatically once it's written; pass `--no-open`
-to skip that.
-
-Or install it as a real command: `pip install -e . && ai-readiness --mock`. `make setup`,
-`make test`, `make demo` also work — see the [Makefile](Makefile).
 
 Progress for each dimension prints to stderr as it runs (useful since a live scan makes many
 sequential NerdGraph/NRQL calls and can take a while — `autopilot` and `human_approval_gates`
