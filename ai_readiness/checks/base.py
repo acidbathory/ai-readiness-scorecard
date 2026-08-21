@@ -16,6 +16,15 @@ class Context:
     account_id: int
     lookback_days: int
     config: dict
+    quiet: bool = False
+    cache: dict = field(default_factory=dict)
+    # True only for live (non-mock) runs. Lets autopilot/human_approval_gates
+    # reuse each other's per-canvas YAML fetch within one run -- the two
+    # checks ask for the exact same canvas definitions. Left off in mock mode
+    # so each dimension's distinct canned fixture (registered per-dimension)
+    # keeps resolving independently instead of one check's mock YAML leaking
+    # into the other's.
+    share_fetch_cache: bool = False
 
 
 @dataclass

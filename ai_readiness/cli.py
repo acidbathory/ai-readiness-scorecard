@@ -178,7 +178,19 @@ def main(argv=None):
         gql = make_live_client(api_key, region)
 
     thresholds = load_config_overrides(args.config)
-    ctx = Context(gql=gql, account_id=account_id, lookback_days=lookback_days, config=thresholds)
+    ctx = Context(
+        gql=gql,
+        account_id=account_id,
+        lookback_days=lookback_days,
+        config=thresholds,
+        quiet=args.quiet,
+        # Cross-dimension YAML-fetch caching only makes sense against a real
+        # account -- in --mock mode each dimension has its own distinct
+        # canned fixture for the same workflow name, by design (see
+        # fixtures/mock_responses.py), so sharing a cache there would let one
+        # check's fixture silently leak into another's.
+        share_fetch_cache=not args.mock,
+    )
 
     checks = select_checks(args.only)
     if args.mock:
@@ -192,15 +204,23 @@ def main(argv=None):
         print(f"Scoring {mode}, lookback {lookback_days}d, {len(checks)} dimension(s)...", file=sys.stderr)
 
     results = []
+    run_started = time.monotonic()
     for i, c in enumerate(checks, 1):
         if not args.quiet:
-            print(f"  [{i}/{len(checks)}] {c.DIMENSION} ({c.LABEL})...", file=sys.stderr)
+            total_so_far = time.monotonic() - run_started
+            print(
+                f"  [{i}/{len(checks)}] {c.DIMENSION} ({c.LABEL})... "
+                f"(total elapsed so far: {total_so_far:.0f}s)",
+                file=sys.stderr,
+            )
         started = time.monotonic()
         result = run_check(c, ctx)
         results.append(result)
         if not args.quiet:
             elapsed = time.monotonic() - started
             print(f"  [{i}/{len(checks)}] {c.DIMENSION}: {result.tier} ({elapsed:.1f}s)", file=sys.stderr)
+    if not args.quiet:
+        print(f"Done in {time.monotonic() - run_started:.0f}s total.", file=sys.stderr)
 
     agg = aggregate(results)
     meta = {

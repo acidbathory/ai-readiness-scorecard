@@ -8,6 +8,9 @@ concept exposed anywhere on a workflow definition in this schema -- adoption
 is measured by workflow *count*, not an enabled subset.
 """
 
+import sys
+import time
+
 from ..scoring import tier_from_count
 from .base import CheckResult
 from .. import config as config_module
@@ -70,6 +73,68 @@ def fetch_workflows(ctx):
         if not cursor:
             break
     return workflows
+
+
+YAML_QUERY = """
+query($accountId: Int!, $name: String!) {
+  actor {
+    account(id: $accountId) {
+      workflowAutomation { workflow(name: $name) { definition { yaml } } }
+    }
+  }
+}
+"""
+
+# How often (in canvases processed) to print a progress/ETA line for the
+# per-canvas YAML loop. Only kicks in once there's enough workflows for the
+# wait to actually matter.
+_PROGRESS_EVERY = 25
+_PROGRESS_MIN_TOTAL = 20
+
+
+def fetch_workflow_yaml(ctx, workflows, dimension_label):
+    """Yields (name, yaml_text) for each workflow, one NerdGraph call each --
+    UNLESS ctx.share_fetch_cache is on (live runs only) and another dimension
+    already fetched that exact canvas this run, in which case it's free.
+
+    Prints a running elapsed/ETA line to stderr every _PROGRESS_EVERY
+    canvases once there are enough of them for it to matter (skipped
+    entirely under --quiet), since this loop -- one HTTP call per canvas --
+    is the slow part on workflow-heavy accounts.
+    """
+    cache = ctx.cache.setdefault("workflow_yaml", {}) if ctx.share_fetch_cache else None
+    total = len(workflows)
+    started = time.monotonic()
+    fetched = 0
+    for i, w in enumerate(workflows, 1):
+        name = w.get("name")
+        if cache is not None and name in cache:
+            yaml_text = cache[name]
+        else:
+            data = ctx.gql(
+                YAML_QUERY,
+                {"accountId": ctx.account_id, "name": name},
+                fixture_key=f"{dimension_label}.yaml::{name}",
+            )
+            yaml_text = (
+                data.get("actor", {}).get("account", {}).get("workflowAutomation", {})
+                .get("workflow", {}).get("definition", {}).get("yaml", "") or ""
+            )
+            if cache is not None:
+                cache[name] = yaml_text
+            fetched += 1
+
+        if not ctx.quiet and total >= _PROGRESS_MIN_TOTAL and (i % _PROGRESS_EVERY == 0 or i == total):
+            elapsed = time.monotonic() - started
+            remaining = (elapsed / fetched) * (total - i) if fetched else 0.0
+            cached_so_far = i - fetched
+            print(
+                f"      {dimension_label}: canvas {i}/{total} "
+                f"({fetched} fetched, {cached_so_far} reused from cache) -- "
+                f"{elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining",
+                file=sys.stderr,
+            )
+        yield name, yaml_text
 
 
 def run(ctx):

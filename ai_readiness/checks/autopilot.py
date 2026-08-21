@@ -9,7 +9,7 @@ a confirmed primitive, hence "medium" rather than "high" confidence.
 
 from ..scoring import tier_from_count
 from .base import CheckResult
-from .workflow_automation import fetch_workflows
+from .workflow_automation import fetch_workflows, fetch_workflow_yaml
 from .. import config as config_module
 
 DIMENSION = "autopilot"
@@ -33,16 +33,6 @@ REMEDIATION_UNKNOWN = (
     "own fetch succeeding first."
 )
 
-YAML_QUERY = """
-query($accountId: Int!, $name: String!) {
-  actor {
-    account(id: $accountId) {
-      workflowAutomation { workflow(name: $name) { definition { yaml } } }
-    }
-  }
-}
-"""
-
 AUTOPILOT_MARKERS = ("autopilot", "newrelic.autopilot.run")
 
 
@@ -51,17 +41,7 @@ def run(ctx):
     workflows = fetch_workflows(ctx)
 
     matched = 0
-    for w in workflows:
-        name = w.get("name")
-        data = ctx.gql(
-            YAML_QUERY,
-            {"accountId": ctx.account_id, "name": name},
-            fixture_key=f"autopilot.yaml::{name}",
-        )
-        yaml_text = (
-            data.get("actor", {}).get("account", {}).get("workflowAutomation", {})
-            .get("workflow", {}).get("definition", {}).get("yaml", "") or ""
-        )
+    for name, yaml_text in fetch_workflow_yaml(ctx, workflows, "autopilot"):
         if any(marker in yaml_text.lower() for marker in AUTOPILOT_MARKERS):
             matched += 1
 

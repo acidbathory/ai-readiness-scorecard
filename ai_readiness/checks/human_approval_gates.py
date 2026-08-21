@@ -12,7 +12,7 @@ markers are present somewhere in the same canvas.
 
 from ..scoring import tier_from_count
 from .base import CheckResult
-from .workflow_automation import fetch_workflows
+from .workflow_automation import fetch_workflows, fetch_workflow_yaml
 from .. import config as config_module
 
 DIMENSION = "human_approval_gates"
@@ -38,16 +38,6 @@ REMEDIATION_UNKNOWN = (
     "this check depends on the same workflow list and YAML fetch as workflow_automation/autopilot."
 )
 
-YAML_QUERY = """
-query($accountId: Int!, $name: String!) {
-  actor {
-    account(id: $accountId) {
-      workflowAutomation { workflow(name: $name) { definition { yaml } } }
-    }
-  }
-}
-"""
-
 ACTION_MARKERS = ("http.post", "aws.", "lambda", "restart", "rollback", "remediate")
 APPROVAL_MARKERS = ("getreactions", "approval", "waitfor", "reaction", "approve")
 
@@ -58,17 +48,8 @@ def run(ctx):
 
     action_taking = 0
     gated = 0
-    for w in workflows:
-        name = w.get("name")
-        data = ctx.gql(
-            YAML_QUERY,
-            {"accountId": ctx.account_id, "name": name},
-            fixture_key=f"human_approval_gates.yaml::{name}",
-        )
-        yaml_text = (
-            data.get("actor", {}).get("account", {}).get("workflowAutomation", {})
-            .get("workflow", {}).get("definition", {}).get("yaml", "") or ""
-        ).lower()
+    for name, yaml_text in fetch_workflow_yaml(ctx, workflows, "human_approval_gates"):
+        yaml_text = yaml_text.lower()
         has_action = any(marker in yaml_text for marker in ACTION_MARKERS)
         if has_action:
             action_taking += 1
