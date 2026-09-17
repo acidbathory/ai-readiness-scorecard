@@ -14,9 +14,9 @@ confirmed populated; add `gen_ai.provider.name` alongside it once that
 attribute shows up live on some account.
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY
 from ..scoring import tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "model_vendor_diversity"
 LABEL = "Multi-provider / vendor resilience"
@@ -39,12 +39,6 @@ REMEDIATION_UNKNOWN = (
     "Confirm the New Relic user key has NRQL read permission for LlmChatCompletionSummary "
     "and Span event types on this account."
 )
-
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
-}
-"""
 
 
 def _unique_count(ctx, nrql, fixture_key, key):
@@ -78,18 +72,11 @@ def run(ctx):
         f"(scoring on the stronger of the two signals)"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={
             "llm_vendor_count": llm_vendor_count,
             "genai_vendor_count": genai_vendor_count,
             "vendor_count": vendor_count,
         },
-        remediation=REMEDIATION[score],
     )

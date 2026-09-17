@@ -1,6 +1,7 @@
 from . import (
     ai_agent_tracing,
     ai_change_tracking,
+    ai_coding_observability,
     ai_cost_governance,
     ai_monitoring,
     ai_quality_feedback,
@@ -32,6 +33,7 @@ ALL_CHECKS = [
     dashboards_logs,
     ai_cost_governance,
     ai_change_tracking,
+    ai_coding_observability,
 ]
 
 CHECKS_BY_DIMENSION = {c.DIMENSION: c for c in ALL_CHECKS}

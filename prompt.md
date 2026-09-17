@@ -2,7 +2,7 @@ As a founding Solutions consultant for GCC I have been tasked with Pitching New 
 
 - I need an AI readiness framework which I can build as a utility which check how ready a customers AI workloads are
 - This could be for both AI for Observability and observability for AI
-- Refer to conticonnect, SAP-Demo folders to get env variables
+- Refer to reference-repo-a, reference-repo-b folders to get env variables
 - Suggest ideas to incorporate each part of new relic, this is AI monitoring, APM, Infra, Security RX, Knowledge, Autopilot etc
 - Take cues from:
 

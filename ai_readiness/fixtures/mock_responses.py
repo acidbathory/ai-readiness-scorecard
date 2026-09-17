@@ -8,6 +8,14 @@ real account:
              apm_coverage.entities is a *list* of page dicts, exercising the
              entitySearch pagination cursor loop (untested by either
              reference repo, so it needs its own fixture).
+
+apm_coverage.entities simulates the server having already applied the
+`tags.aiEnabledApp = 'true'` filter -- it lists only tagged entities.
+apm_coverage.total is the separate, unfiltered reporting-APM count (the
+evidence denominator), deliberately including untagged services with
+AI-adjacent-sounding names (e.g. a hypothetical `email-service` would count
+toward the total but never appear in .entities without the tag) to prove the
+tag filter, not a name pattern, is what gates the count.
 """
 
 
@@ -62,6 +70,7 @@ def _alert_conditions(conditions):
 
 NONE = {
     "apm_coverage.entities": _apm_page([]),
+    "apm_coverage.total": _entity_count(0),
     "infra_gpu.hosts": _entity_count(0),
     "infra_gpu.gpu_hosts": _nrql_results([{"uniqueCount.hostname": 0}]),
     "ai_monitoring.events": _nrql_results([{"count": 0}]),
@@ -91,30 +100,33 @@ NONE = {
     "ai_cost_governance.conditions": _alert_conditions([]),
     "ai_change_tracking.total": _nrql_results([{"count": 0}]),
     "ai_change_tracking.events": _nrql_results([]),
+    "ai_coding_observability.tool_calls": _nrql_results([{"count": 0}]),
+    "ai_coding_observability.tasks": _nrql_results([{"count": 0}]),
+    "ai_coding_observability.anti_patterns": _nrql_results([{"count": 0}]),
 }
 
 _PARTIAL_WORKFLOW_NAMES = ["wf-a", "wf-b", "wf-c", "wf-d"]
 
 PARTIAL = {
+    # 3 of 8 reporting APM services carry the aiEnabledApp tag; the other 5
+    # (orders-service, billing-service, shipping-service, catalog-service,
+    # user-service -- untagged, not returned here at all) count toward
+    # apm_coverage.total below but never toward this tagged list.
     "apm_coverage.entities": [
         _apm_page(
             [
-                {"guid": "a1", "name": "orders-service"},
                 {"guid": "a2", "name": "ai-recommender"},
-                {"guid": "a3", "name": "billing-service"},
                 {"guid": "a4", "name": "agent-scheduler"},
-                {"guid": "a5", "name": "shipping-service"},
             ],
             next_cursor="page2",
         ),
         _apm_page(
             [
                 {"guid": "a6", "name": "rag-search"},
-                {"guid": "a7", "name": "catalog-service"},
-                {"guid": "a8", "name": "user-service"},
             ]
         ),
     ],
+    "apm_coverage.total": _entity_count(8),
     "infra_gpu.hosts": _entity_count(6),
     "infra_gpu.gpu_hosts": _nrql_results([{"uniqueCount.hostname": 1}]),
     "ai_monitoring.events": _nrql_results([{"count": 1200}]),
@@ -185,14 +197,19 @@ PARTIAL = {
             {"description": "Scaled up checkout-service replicas"},
         ]
     ),
+    "ai_coding_observability.tool_calls": _nrql_results([{"count": 150}]),
+    "ai_coding_observability.tasks": _nrql_results([{"count": 40}]),
+    "ai_coding_observability.anti_patterns": _nrql_results([{"count": 6}]),
 }
 
 _MATURE_WORKFLOW_NAMES = [f"wf-{i}" for i in range(1, 8)]
 
 MATURE = {
+    # 8 of 10 reporting APM services carry the aiEnabledApp tag; the other 2
+    # (checkout-service, payments-service -- untagged) count toward
+    # apm_coverage.total below but never toward this tagged list.
     "apm_coverage.entities": _apm_page(
         [
-            {"guid": "g1", "name": "checkout-service"},
             {"guid": "g2", "name": "llm-gateway"},
             {"guid": "g3", "name": "rag-retriever"},
             {"guid": "g4", "name": "ai-agent-orchestrator"},
@@ -201,9 +218,9 @@ MATURE = {
             {"guid": "g7", "name": "model-server"},
             {"guid": "g8", "name": "agent-worker"},
             {"guid": "g9", "name": "ai-router"},
-            {"guid": "g10", "name": "payments-service"},
         ]
     ),
+    "apm_coverage.total": _entity_count(10),
     "infra_gpu.hosts": _entity_count(25),
     "infra_gpu.gpu_hosts": _nrql_results([{"uniqueCount.hostname": 6}]),
     "ai_monitoring.events": _nrql_results([{"count": 60000}]),
@@ -279,6 +296,9 @@ MATURE = {
             {"description": "Rotated database credentials"},
         ]
     ),
+    "ai_coding_observability.tool_calls": _nrql_results([{"count": 5000}]),
+    "ai_coding_observability.tasks": _nrql_results([{"count": 400}]),
+    "ai_coding_observability.anti_patterns": _nrql_results([{"count": 50}]),
 }
 
 SCENARIOS = {"none": NONE, "partial": PARTIAL, "mature": MATURE}

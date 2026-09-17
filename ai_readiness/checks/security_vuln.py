@@ -6,9 +6,9 @@ genuinely has zero vulnerability scanning should read as Absent; an account
 where we simply guessed the wrong query should not look the same).
 """
 
-from ..nerdgraph import NerdGraphError
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRAI_VULN_NRQL_QUERY, NerdGraphError
 from ..scoring import tier_from_count
-from .base import CheckResult
+from .base import CheckResult, result_for
 from .. import config as config_module
 
 DIMENSION = "security_vuln"
@@ -38,12 +38,8 @@ REMEDIATION_UNKNOWN = (
 )
 
 VULN_DOMAIN_QUERY = """
-{ actor { entitySearch(query: "domain = 'VULN'") { count } } }
-"""
-
-NRAI_VULN_NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
+query($query: String!) {
+  actor { entitySearch(query: $query) { count } }
 }
 """
 
@@ -56,7 +52,11 @@ def run(ctx):
     source = None
 
     try:
-        data = ctx.gql(VULN_DOMAIN_QUERY, fixture_key="security_vuln.vuln_domain")
+        data = ctx.gql(
+            VULN_DOMAIN_QUERY,
+            {"query": f"domain = 'VULN' AND accountId = {ctx.account_id}"},
+            fixture_key="security_vuln.vuln_domain",
+        )
         count = data.get("actor", {}).get("entitySearch", {}).get("count", 0)
         source = "entitySearch(domain = 'VULN')"
     except NerdGraphError as exc:
@@ -101,14 +101,7 @@ def run(ctx):
         f"{count} scanned entities/vulnerability records found via {source} "
         f"(UNVERIFIED query shape -- confirm against a real account)"
     )
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"scanned_count": count, "source": source},
-        remediation=REMEDIATION[score],
     )

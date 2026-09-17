@@ -73,6 +73,33 @@ class TestAggregate(unittest.TestCase):
         agg = aggregate([])
         self.assertEqual(agg["lens_scores"], {})
         self.assertEqual(agg["overall_score"], 0.0)
+        self.assertEqual(agg["scored_count"], 0)
+        self.assertEqual(agg["total_count"], 0)
+
+    def test_scored_and_total_counts(self):
+        results = [
+            self._result("a", "observability_for_ai", 3),
+            self._result("b", "observability_for_ai", None),
+            self._result("c", "ai_for_observability", 2),
+        ]
+        agg = aggregate(results)
+        self.assertEqual(agg["scored_count"], 2)
+        self.assertEqual(agg["total_count"], 3)
+        self.assertEqual(agg["lens_counts"]["observability_for_ai"], {"scored": 1, "total": 2})
+        self.assertEqual(agg["lens_counts"]["ai_for_observability"], {"scored": 1, "total": 1})
+
+    def test_all_unknown_does_not_render_as_a_full_score(self):
+        """The exact scenario the review flagged: a key that can only read
+        one dimension leaves the other 13 Unknown. The headline score is
+        still computed only from what scored, but scored_count/total_count
+        must disclose that it's 1 of 14, not a full run."""
+        results = [self._result("a", "observability_for_ai", 3)] + [
+            self._result(f"unknown-{i}", "observability_for_ai", None) for i in range(13)
+        ]
+        agg = aggregate(results)
+        self.assertEqual(agg["overall_score"], 10.0)
+        self.assertEqual(agg["scored_count"], 1)
+        self.assertEqual(agg["total_count"], 14)
 
 
 if __name__ == "__main__":

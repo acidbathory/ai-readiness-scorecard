@@ -1,12 +1,12 @@
 """Confidence: HIGH for the enabled-condition count (query shape confirmed:
-continental-demo/scripts/bootstrap.py:165-196). The anomaly/baseline-type
+reference-repo-a/scripts/bootstrap.py:165-196). The anomaly/baseline-type
 breakdown is a best-effort annotation only -- it does NOT gate the tier --
 since the exact `type` field values are unverified against a live account.
 """
 
+from ..nerdgraph import paginated_alert_conditions
 from ..scoring import tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "alerting_anomaly"
 LABEL = "Alerting & anomaly-detection coverage"
@@ -29,11 +29,12 @@ REMEDIATION_UNKNOWN = (
 )
 
 QUERY = """
-query($accountId: Int!) {
+query($accountId: Int!, $cursor: String) {
   actor {
     account(id: $accountId) {
       alerts {
-        nrqlConditionsSearch(searchCriteria: {}) {
+        nrqlConditionsSearch(searchCriteria: {}, cursor: $cursor) {
+          nextCursor
           totalCount
           nrqlConditions { id name enabled type }
         }
@@ -49,9 +50,9 @@ ANOMALY_TYPE_MARKERS = ("baseline", "anomaly")
 
 def run(ctx):
     thresholds = ctx.config[DIMENSION]
-    data = ctx.gql(QUERY, {"accountId": ctx.account_id}, fixture_key="alerting_anomaly.conditions")
-    search = data.get("actor", {}).get("account", {}).get("alerts", {}).get("nrqlConditionsSearch", {})
-    conditions = search.get("nrqlConditions", []) or []
+    conditions = paginated_alert_conditions(
+        ctx.gql, QUERY, ctx.account_id, fixture_key="alerting_anomaly.conditions"
+    )
 
     enabled = [c for c in conditions if c.get("enabled")]
     anomaly_like = [
@@ -66,14 +67,7 @@ def run(ctx):
         f"unverified against a live account)"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"enabled_conditions": len(enabled), "anomaly_like_conditions": len(anomaly_like)},
-        remediation=REMEDIATION[score],
     )

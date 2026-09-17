@@ -13,7 +13,10 @@ from ai_readiness.report import render_json
 from ai_readiness.scoring import aggregate
 
 EXPECTED_SCORES = {
-    "none": {c.DIMENSION: 0 for c in ALL_CHECKS},
+    # human_approval_gates: the "none" scenario has zero workflows at all, so
+    # there are zero action-taking ones -- Not Applicable (score=None), not
+    # tier-0 Absent, since there's nothing to gate rather than an ungated gap.
+    "none": {**{c.DIMENSION: 0 for c in ALL_CHECKS}, "human_approval_gates": None},
     "mature": {c.DIMENSION: 3 for c in ALL_CHECKS},
     "partial": {
         "apm_coverage": 2,
@@ -30,14 +33,16 @@ EXPECTED_SCORES = {
         "dashboards_logs": 2,
         "ai_cost_governance": 2,
         "ai_change_tracking": 1,
+        "ai_coding_observability": 2,
     },
 }
 
 # Displayed on a 0-10 scale (aggregate() scales internal 0-3 tier averages by
 # 10/3): none stays 0.0, mature's raw 3.0 -> 10.0. partial's 5.8 is a golden
-# value observed by running the fixtures (14 dimensions across 2 lenses of
+# value observed by running the fixtures (15 dimensions across 2 lenses of
 # uneven size makes hand-deriving the exact roll-up error-prone) -- it
-# happens to be unchanged from the 10-dimension version by coincidence.
+# happens to be unchanged from both the 10- and 14-dimension versions, by
+# coincidence each time.
 EXPECTED_OVERALL = {"none": 0.0, "partial": 5.8, "mature": 10.0}
 
 

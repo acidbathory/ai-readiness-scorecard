@@ -3,7 +3,7 @@
 `{ nextCursor, results: [{ definition: { name, description, version } }] }` --
 NOT the flat `{ name enabled }` shape originally guessed by analogy to the
 singular `workflow(name:)` lookup (that one *is* confirmed:
-continental-demo/scripts/bootstrap.py:97-110). There is no `enabled`/disabled
+reference-repo-a/scripts/bootstrap.py:97-110). There is no `enabled`/disabled
 concept exposed anywhere on a workflow definition in this schema -- adoption
 is measured by workflow *count*, not an enabled subset.
 """
@@ -11,9 +11,9 @@ is measured by workflow *count*, not an enabled subset.
 import sys
 import time
 
+from ..nerdgraph import NerdGraphError
 from ..scoring import tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "workflow_automation"
 LABEL = "Workflow Automation adoption"
@@ -55,7 +55,15 @@ MAX_PAGES = 10
 
 
 def fetch_workflows(ctx):
-    """Returns a list of {"name": ...} dicts, following nextCursor."""
+    """Returns a list of {"name": ...} dicts, following nextCursor. Cached on
+    ctx for the whole run: workflow_automation/autopilot/human_approval_gates
+    all fetch the exact same list via the exact same query and fixture_key,
+    so caching it (unlike the per-canvas YAML fetch, whose fixture_key
+    varies by dimension under --mock) is safe in both live and mock mode and
+    turns 3 redundant NerdGraph round-trips into 1."""
+    if "workflows" in ctx.cache:
+        return ctx.cache["workflows"]
+
     workflows = []
     cursor = None
     for _ in range(MAX_PAGES):
@@ -72,6 +80,10 @@ def fetch_workflows(ctx):
         cursor = page.get("nextCursor")
         if not cursor:
             break
+    else:
+        raise NerdGraphError(f"workflowAutomation.workflows pagination exceeded max_pages={MAX_PAGES}")
+
+    ctx.cache["workflows"] = workflows
     return workflows
 
 
@@ -143,14 +155,7 @@ def run(ctx):
     score = tier_from_count(len(workflows), thresholds["min_workflows_for_tier"])
     evidence = f"{len(workflows)} workflows configured"
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"total_workflows": len(workflows)},
-        remediation=REMEDIATION[score],
     )

@@ -4,7 +4,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![python: 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
-Scores a New Relic account's AI readiness across **14 dimensions**, via NerdGraph. Produces a
+Scores a New Relic account's AI readiness across **15 dimensions**, via NerdGraph. Produces a
 table, JSON, a CIS-benchmark-style HTML report, and a live dashboard inside New Relic itself.
 
 **Requirements:** Python 3.9 or later. Nothing else — no `pip install`, no external
@@ -86,11 +86,20 @@ live run on such an account). Pass `--quiet`/`-q` to suppress the progress lines
 
 ## What it scores
 
-Two lenses, 14 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**. Lens and
+Two lenses, 15 dimensions, each tiered **Absent → Ad hoc → Managed → Optimized**. Lens and
 overall scores are displayed on a **0-10 scale** (the 4 internal tiers are what's actually
 measured; 0-10 is just the display convention for the roll-up numbers). Each dimension's
 remediation text is tier-specific — a concrete next step to move up a level, not one generic
 sentence regardless of where you're starting from.
+
+The overall score averages the two **lens** means, not a flat average across all 15
+dimensions — that gives each lens equal say in the headline regardless of how many dimensions
+it has, but since the lenses currently have 8 and 7 dimensions respectively, each individual
+dimension in the smaller lens carries slightly more per-dimension weight on the headline than
+one in the larger lens. Dimensions within a lens aren't fully independent either — one missing
+capability (e.g. no LLM telemetry at all) can zero out several related dimensions at once. Both
+are real properties of scoring 15 correlated signals with two of unequal size, not bugs; see
+`scoring.aggregate()`'s docstring for the full reasoning.
 
 | Lens | Dimension | Confidence | Signal |
 |---|---|---|---|
@@ -108,6 +117,7 @@ sentence regardless of where you're starting from.
 | | `dashboards_logs` | high | Dashboard count + log volume |
 | | `ai_cost_governance` | high | Alert conditions targeting AI token/cost spend |
 | | `ai_change_tracking` | medium | Change Tracking events referencing AI/prompt/model changes |
+| | `ai_coding_observability` | unverified | AI coding-assistant usage/task/anti-pattern events (`AiToolCall`/`AiCodingTask`/`AiAntiPattern`) |
 
 Run `python3 -m ai_readiness --list-dimensions` to see this live, with each dimension's exact
 label.
@@ -140,12 +150,20 @@ built yet: shadow-AI detection (unsanctioned LLM tool usage via network egress) 
 specific tracing — both need more groundwork on what's actually queryable before they'd be
 more than a guess.
 
+**`ai_coding_observability`** is a different axis from the other 14: it measures AI *in the
+SDLC* (are engineers' AI coding assistants even being tracked?) rather than AI *in production*.
+It's the origin idea behind this whole project (see [the AI coding observability
+announcement](https://newrelic.com/blog/news/introducing-ai-coding-observability) cited in
+`prompt.md`), added last since none of `AiToolCall`/`AiCodingTask`/`AiAntiPattern` has a
+confirmed live query shape yet — expect `Unknown` on any account without that integration
+enabled, not a false `Absent`.
+
 ## Confidence legend
 
 | Level | Meaning |
 |---|---|
 | `high` | Query shape confirmed against a working, live-tested pattern |
-| `medium` | Confirmed live against one real account — not yet proven across multiple engagements |
+| `medium` | Confirmed live against only one real account (not yet proven across multiple engagements), or a confirmed primitive with an unverified heuristic layered on top |
 | `unverified` | Best-effort guess, no confirmed populated example on any account tested yet |
 
 An `unverified` check that fails outright reports an honest `Unknown` — never a false `Absent`.
@@ -191,6 +209,7 @@ python3 -m ai_readiness --only autopilot,infra_gpu,ai_monitoring,model_vendor_di
 python3 -m ai_readiness --only ai_change_tracking,human_approval_gates  # human_approval_gates is slow: one YAML fetch per canvas
 python3 -m ai_readiness --only security_vuln        # expect this may need a query-shape fix
 python3 -m ai_readiness --only ai_quality_feedback  # expect Absent even when the query is right
+python3 -m ai_readiness --only ai_coding_observability  # expect Unknown unless AI coding observability is enabled
 ```
 
 ### Tuning thresholds
@@ -225,6 +244,9 @@ and one registry line, nothing else changes.
   ambiguous (real Absent vs. a wrong filter value silently matching nothing).
 - Confirm `ai_quality_feedback`'s `LlmFeedbackMessage` event type against an account that
   actually captures AI output feedback — every account tested so far has zero.
+- Confirm `ai_coding_observability`'s `AiToolCall`/`AiCodingTask`/`AiAntiPattern` event types
+  against an account with New Relic's AI coding observability integration enabled — no account
+  tested so far has it, so the query shapes are still a best-effort guess.
 - Watch for OTel GenAI attribute renames (`gen_ai.system` → `gen_ai.provider.name` already
   happened) and add the new name alongside the old one rather than replacing it outright, since
   older instrumentation will keep emitting the deprecated name for a while.

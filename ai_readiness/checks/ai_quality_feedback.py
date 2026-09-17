@@ -9,9 +9,9 @@ honest-Unknown-on-error pattern as security_vuln.py: a query failure means
 "couldn't verify," not a false "Absent".
 """
 
-from ..nerdgraph import NerdGraphError
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY, NerdGraphError
 from ..scoring import tier_from_count
-from .base import CheckResult
+from .base import CheckResult, result_for
 from .. import config as config_module
 
 DIMENSION = "ai_quality_feedback"
@@ -36,12 +36,6 @@ REMEDIATION_UNKNOWN = (
     "Confirm the New Relic user key has NRQL read permission on this account and "
     "that the `LlmFeedbackMessage` event type is queryable."
 )
-
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
-}
-"""
 
 
 def run(ctx):
@@ -77,14 +71,7 @@ def run(ctx):
     score = tier_from_count(count, thresholds["min_feedback_events_for_tier"])
     evidence = f"{count} LlmFeedbackMessage events over {ctx.lookback_days}d"
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"feedback_event_count": count},
-        remediation=REMEDIATION[score],
     )

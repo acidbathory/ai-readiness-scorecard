@@ -1,14 +1,14 @@
 """Confidence: HIGH. Dashboard entitySearch shape confirmed
-(continental-demo/dashboard/deploy_dashboard.py:216-217,
+(reference-repo-a/dashboard/deploy_dashboard.py:216-217,
 scripts/bootstrap.py:233). Log volume via bytecountestimate() lifted from
 deploy_dashboard.py's cost page. Both signals must be present to score above
 "Ad hoc" (combine via min) -- a customer with dashboards but no real log
 volume, or vice versa, isn't "Managed" on this dimension.
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY
 from ..scoring import combine_tiers, tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "dashboards_logs"
 LABEL = "Dashboard & log coverage"
@@ -36,12 +36,6 @@ REMEDIATION_UNKNOWN = (
 DASHBOARDS_QUERY = """
 query($query: String!) {
   actor { entitySearch(query: $query) { count } }
-}
-"""
-
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
 }
 """
 
@@ -84,18 +78,11 @@ def run(ctx):
         f"across {log_entity_count} entities over the last {ctx.lookback_days} days"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={
             "dashboard_count": dashboard_count,
             "log_gb_per_day": round(gb_per_day, 3),
             "log_entity_count": log_entity_count,
         },
-        remediation=REMEDIATION[score],
     )

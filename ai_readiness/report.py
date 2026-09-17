@@ -21,6 +21,11 @@ def render_table(results, agg, meta):
         f"AI Readiness Scorecard -- account {meta['account_id']} ({meta['region']}), "
         f"lookback {meta['lookback_days']}d"
     )
+    if meta.get("tool_version") or meta.get("config_fingerprint"):
+        lines.append(
+            f"tool v{meta.get('tool_version', '?')}, config {meta.get('config_fingerprint', '?')} "
+            f"-- two scorecards only compare directly if both match"
+        )
     lines.append("")
 
     for lens_key, lens_label in config_module.LENS_LABELS.items():
@@ -28,7 +33,11 @@ def render_table(results, agg, meta):
         if not lens_results:
             continue
         score = agg["lens_scores"].get(lens_key)
-        header = f"{lens_label} (avg: {score if score is not None else 'n/a'} / 10)"
+        counts = agg["lens_counts"].get(lens_key, {"scored": 0, "total": len(lens_results)})
+        header = (
+            f"{lens_label} (avg: {score if score is not None else 'n/a'} / 10, "
+            f"scored {counts['scored']} of {counts['total']})"
+        )
         lines.append(header)
         lines.append("-" * len(header))
 
@@ -41,7 +50,10 @@ def render_table(results, agg, meta):
             )
         lines.append("")
 
-    lines.append(f"Overall AI Readiness score: {agg['overall_score']} / 10")
+    lines.append(
+        f"Overall AI Readiness score: {agg['overall_score']} / 10 "
+        f"(scored {agg['scored_count']} of {agg['total_count']} dimensions)"
+    )
     return "\n".join(lines)
 
 
@@ -65,6 +77,9 @@ def render_json(results, agg, meta):
         ],
         "lens_scores": agg["lens_scores"],
         "overall_score": agg["overall_score"],
+        "scored_count": agg["scored_count"],
+        "total_count": agg["total_count"],
+        "lens_counts": agg["lens_counts"],
     }
     return json.dumps(payload, indent=2)
 
@@ -75,12 +90,15 @@ TIER_COLORS = {
     "Managed": "#1DCAD3",
     "Optimized": "#1CE783",
     config_module.UNKNOWN_TIER_LABEL: "#7A8288",
+    config_module.NOT_APPLICABLE_TIER_LABEL: "#5DADE2",
 }
 TIER_COLORS_BY_INDEX = {0: "#FF4D6D", 1: "#FF8300", 2: "#1DCAD3", 3: "#1CE783"}
 
 CONFIDENCE_LEGEND = (
-    "high = query shape confirmed against a working reference pattern &middot; "
-    "medium = confirmed primitive + an unverified heuristic layered on top &middot; "
+    "high = query shape confirmed against a working, live-tested pattern &middot; "
+    "medium = confirmed live against only one real account (not yet proven across "
+    "multiple engagements), or a confirmed primitive with an unverified heuristic "
+    "layered on top &middot; "
     "unverified = no prior art; if this shows Unknown, the query shape needs "
     "confirming against a real account, not treated as Absent"
 )
@@ -100,12 +118,17 @@ def _badge(tier):
     return f'<span class="badge" style="background:{color}">{_escape(tier)}</span>'
 
 
-def _gauge(score_10, label):
+def _gauge(score_10, label, counts=None):
     pct = max(0, min(100, score_10 * 10))
     color = TIER_COLORS_BY_INDEX[tier_index_from_score(score_10)]
+    counts_line = (
+        f'<div class="gauge-counts">scored {counts["scored"]} of {counts["total"]}</div>'
+        if counts else ""
+    )
     return f"""<div class="gauge-block">
       <div class="gauge-top"><span class="gauge-label">{_escape(label)}</span><span class="gauge-value">{score_10} / 10</span></div>
       <div class="gauge"><div class="gauge-fill" style="width:{pct}%;background:{color}"></div></div>
+      {counts_line}
     </div>"""
 
 
@@ -130,7 +153,8 @@ def render_html(results, agg, meta):
     overall_tier = config_module.TIER_LABELS[tier_index_from_score(overall_score)]
 
     lens_gauges = "".join(
-        _gauge(score, config_module.LENS_LABELS[lens]) for lens, score in agg["lens_scores"].items()
+        _gauge(score, config_module.LENS_LABELS[lens], agg["lens_counts"].get(lens))
+        for lens, score in agg["lens_scores"].items()
     )
 
     lens_sections = []
@@ -146,9 +170,6 @@ def render_html(results, agg, meta):
 <head>
 <meta charset="utf-8">
 <title>AI Readiness Scorecard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {{
     --bg: #080F11; --panel: #141A1F; --panel-alt: #1D252C; --border: #232C33;
@@ -157,7 +178,10 @@ def render_html(results, agg, meta):
   }}
   * {{ box-sizing: border-box; }}
   body {{
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    /* System font stack only -- no Google Fonts request, so the report
+       (including this markup) renders identically whether or not the
+       machine viewing it has network access. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     margin: 0 auto; max-width: 1000px; padding: 3rem 1.5rem 4rem; color: var(--fg); background: var(--bg);
   }}
   h1 {{
@@ -176,12 +200,14 @@ def render_html(results, agg, meta):
   .overall-block {{ min-width: 190px; }}
   .overall {{ font-size: 3rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }}
   .overall-label {{ color: var(--muted); font-size: 0.85rem; margin-top: 0.35rem; }}
+  .overall-counts {{ color: var(--muted); font-size: 0.72rem; margin-top: 0.2rem; }}
   .gauge-block {{ min-width: 220px; flex: 1; align-self: center; }}
   .gauge-top {{ display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem; }}
   .gauge-label {{ color: var(--muted); }}
   .gauge-value {{ font-weight: 700; }}
   .gauge {{ background: var(--border); border-radius: 999px; height: 8px; overflow: hidden; }}
   .gauge-fill {{ height: 100%; border-radius: 999px; }}
+  .gauge-counts {{ color: var(--muted); font-size: 0.72rem; margin-top: 0.3rem; text-align: right; }}
   .dim-grid {{ display: flex; flex-direction: column; gap: 0.9rem; margin-top: 1.1rem; }}
   .dim-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.3rem; }}
   .dim-card-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; }}
@@ -208,11 +234,13 @@ def render_html(results, agg, meta):
     Account {_escape(meta.get('account_id'))} ({_escape(meta.get('region'))}) &middot;
     lookback {_escape(meta.get('lookback_days'))}d
     {f"&middot; generated {_escape(generated_at)}" if generated_at else ""}
+    {f"&middot; tool v{_escape(meta.get('tool_version'))}, config {_escape(meta.get('config_fingerprint'))}" if meta.get('tool_version') else ""}
   </div>
   <div class="summary">
     <div class="overall-block">
       <div class="overall" style="color:{TIER_COLORS.get(overall_tier, '#7A8288')}">{overall_score} / 10</div>
       <div class="overall-label">Overall &middot; {_escape(overall_tier)}</div>
+      <div class="overall-counts">Scored {agg['scored_count']} of {agg['total_count']} dimensions</div>
     </div>
     {lens_gauges}
   </div>

@@ -1,5 +1,5 @@
 """Confidence: HIGH. Same `nrqlConditionsSearch` shape alerting_anomaly.py
-already confirmed live (continental-demo/scripts/bootstrap.py:165-196), plus
+already confirmed live (reference-repo-a/scripts/bootstrap.py:165-196), plus
 one addition confirmed live on the same account (2026-08-20): the
 `NrqlCondition` type's `nrql { query }` field returns each condition's actual
 NRQL text, not just its name. That lets this check keyword-match on real
@@ -8,9 +8,9 @@ even when the condition's name doesn't mention cost/tokens at all -- a real
 gap a name-only match (like alerting_anomaly's anomaly-type annotation) would miss.
 """
 
+from ..nerdgraph import paginated_alert_conditions
 from ..scoring import tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "ai_cost_governance"
 LABEL = "AI cost / token spend governance"
@@ -33,11 +33,12 @@ REMEDIATION_UNKNOWN = (
 )
 
 QUERY = """
-query($accountId: Int!) {
+query($accountId: Int!, $cursor: String) {
   actor {
     account(id: $accountId) {
       alerts {
-        nrqlConditionsSearch(searchCriteria: {}) {
+        nrqlConditionsSearch(searchCriteria: {}, cursor: $cursor) {
+          nextCursor
           totalCount
           nrqlConditions { id name enabled nrql { query } }
         }
@@ -52,9 +53,9 @@ COST_KEYWORDS = ("cost", "token", "spend", "budget", "usage.total_tokens", "gen_
 
 def run(ctx):
     thresholds = ctx.config[DIMENSION]
-    data = ctx.gql(QUERY, {"accountId": ctx.account_id}, fixture_key="ai_cost_governance.conditions")
-    search = data.get("actor", {}).get("account", {}).get("alerts", {}).get("nrqlConditionsSearch", {})
-    conditions = search.get("nrqlConditions", []) or []
+    conditions = paginated_alert_conditions(
+        ctx.gql, QUERY, ctx.account_id, fixture_key="ai_cost_governance.conditions"
+    )
 
     enabled = [c for c in conditions if c.get("enabled")]
     matched = [
@@ -71,14 +72,7 @@ def run(ctx):
         f"cost/token spend (keyword-matched on condition name and underlying NRQL text)"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"cost_conditions": len(matched), "enabled_conditions": len(enabled)},
-        remediation=REMEDIATION[score],
     )

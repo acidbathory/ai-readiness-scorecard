@@ -1,8 +1,8 @@
 """Builds and deploys a NerdGraph dashboard snapshot of the scorecard,
 directly adapting the proven pattern in
-continental-demo/dashboard/deploy_dashboard.py: markdown-table widgets
-(md(), the same shape as that script's md()/w() helpers), a dashboardCreate
-mutation, and an idempotent find-by-name + dashboardDelete upsert.
+reference-repo-a/dashboard/deploy_dashboard.py: markdown-table widgets
+(md(), the same shape as that script's md()/w() helpers) and an idempotent
+find-by-name + dashboardUpdate upsert.
 
 Scope limit (see README): this is a point-in-time snapshot re-rendered on
 each deploy, not a live trend dashboard -- the scorecard's numbers are
@@ -21,7 +21,8 @@ TIER_EMOJI = {
     "Ad hoc": "\U0001F7E1",  # yellow circle
     "Managed": "\U0001F535",  # blue circle
     "Optimized": "\U0001F7E2",  # green circle
-    config_module.UNKNOWN_TIER_LABEL: "\U000026AA",  # white circle
+    config_module.UNKNOWN_TIER_LABEL: "\U000026AA",  # white circle -- couldn't measure
+    config_module.NOT_APPLICABLE_TIER_LABEL: "\U00002796",  # heavy minus -- measured, nothing to grade
 }
 
 DASHBOARD_NAME_TEMPLATE = "AI Readiness Scorecard \u2014 Account {account_id}"
@@ -52,13 +53,24 @@ def _executive_summary_markdown(agg, meta):
         f"**Account:** {meta.get('account_id')} ({meta.get('region')})  \n"
         f"**Lookback:** {meta.get('lookback_days')} days"
         + (f"  \n**Generated:** {meta['generated_at']}" if meta.get("generated_at") else "")
+        + (
+            f"  \n**Tool:** v{meta['tool_version']}, config `{meta['config_fingerprint']}`"
+            if meta.get("tool_version") else ""
+        )
     )
-    lines.append(f"\n### Overall score: {agg['overall_score']} / 10\n")
-    lines.append("| Lens | Average score (/10) |")
-    lines.append("|---|---|")
+    lines.append(
+        f"\n### Overall score: {agg['overall_score']} / 10 "
+        f"(scored {agg['scored_count']} of {agg['total_count']} dimensions)\n"
+    )
+    lines.append("| Lens | Average score (/10) | Scored |")
+    lines.append("|---|---|---|")
     for lens_key, lens_label in config_module.LENS_LABELS.items():
         score = agg["lens_scores"].get(lens_key)
-        lines.append(f"| {lens_label} | {score if score is not None else 'n/a'} |")
+        counts = agg["lens_counts"].get(lens_key, {"scored": 0, "total": 0})
+        lines.append(
+            f"| {lens_label} | {score if score is not None else 'n/a'} | "
+            f"{counts['scored']} of {counts['total']} |"
+        )
     return "\n".join(lines)
 
 
@@ -97,14 +109,25 @@ def build_dashboard_payload(results, agg, meta, name=None):
     }
 
 
-def find_existing(gql, name):
-    """Same shape as continental-demo/dashboard/deploy_dashboard.py:215-223."""
-    query = (
-        '{ actor { entitySearch(query: "name = \''
-        + name.replace("'", "\\'")
-        + '\' AND type = \'DASHBOARD\'") { results { entities { guid } } } } }'
-    )
-    data = gql(query)
+FIND_EXISTING_QUERY = """
+query($query: String!) {
+  actor { entitySearch(query: $query) { results { entities { guid } } } }
+}
+"""
+
+
+def find_existing(gql, account_id, name):
+    """Same shape as reference-repo-a/dashboard/deploy_dashboard.py:215-223,
+    plus an accountId scope (same pattern as dashboards_logs.py's
+    DASHBOARDS_QUERY) so a multi-account user key can't match a same-named
+    dashboard sitting in a different account. `name` travels as a bound
+    GraphQL variable rather than being spliced into the query document text,
+    so it can't break out of the document regardless of what characters a
+    customer name contains -- the only escaping still needed is for the
+    single quote inside the entitySearch query-language string itself."""
+    escaped_name = name.replace("\\", "\\\\").replace("'", "\\'")
+    search_query = f"type = 'DASHBOARD' AND accountId = {account_id} AND name = '{escaped_name}'"
+    data = gql(FIND_EXISTING_QUERY, {"query": search_query})
     entities = data.get("actor", {}).get("entitySearch", {}).get("results", {}).get("entities", [])
     return [e["guid"] for e in entities]
 
@@ -118,19 +141,32 @@ mutation($accountId: Int!, $dashboard: DashboardInput!) {
 }
 """
 
-DASHBOARD_DELETE_MUTATION = "mutation($g: EntityGuid!) { dashboardDelete(guid: $g) { status } }"
+DASHBOARD_UPDATE_MUTATION = """
+mutation($guid: EntityGuid!, $dashboard: DashboardInput!) {
+  dashboardUpdate(guid: $guid, dashboard: $dashboard) {
+    entityResult { guid name }
+    errors { description type }
+  }
+}
+"""
 
 
 def deploy(gql, account_id, results, agg, meta, name=None):
-    """Upserts the dashboard by name: deletes any existing dashboard with the
-    same name, then creates a fresh one. Returns {"guid": ..., "name": ...}."""
+    """Upserts the dashboard by name, scoped to account_id: updates the
+    existing dashboard's GUID in place if one is found, otherwise creates a
+    new one. Returns {"guid": ..., "name": ...}. Updating in place (rather
+    than delete-then-create) keeps the GUID -- and therefore the link handed
+    to a customer -- stable across reruns."""
     payload = build_dashboard_payload(results, agg, meta, name=name)
 
-    for guid in find_existing(gql, payload["name"]):
-        gql(DASHBOARD_DELETE_MUTATION, {"g": guid})
+    existing_guids = find_existing(gql, account_id, payload["name"])
+    if existing_guids:
+        data = gql(DASHBOARD_UPDATE_MUTATION, {"guid": existing_guids[0], "dashboard": payload})
+        result = data.get("dashboardUpdate", {})
+    else:
+        data = gql(DASHBOARD_CREATE_MUTATION, {"accountId": account_id, "dashboard": payload})
+        result = data.get("dashboardCreate", {})
 
-    data = gql(DASHBOARD_CREATE_MUTATION, {"accountId": account_id, "dashboard": payload})
-    result = data.get("dashboardCreate", {})
     if result.get("errors"):
         raise NerdGraphError(json.dumps(result["errors"]))
     return result["entityResult"]

@@ -41,6 +41,29 @@ class CheckResult:
     remediation: str = ""
 
 
+def result_for(dimension, label, lens, confidence, remediation_map, score, evidence, raw_metrics=None):
+    """Builds a scored CheckResult, pairing tier=TIER_LABELS[score] with
+    remediation_map[score] -- the invariant every check module's run()
+    otherwise hand-pairs identically at its own final `return CheckResult(...)`.
+    Structural now, so it can't drift as more dimensions get added; cheap at
+    15 dimensions, would only get more error-prone to hand-verify at 25+.
+
+    Not for the Unknown/Not-Applicable paths -- those have no score to index
+    remediation_map by, and build a CheckResult directly instead.
+    """
+    return CheckResult(
+        dimension=dimension,
+        label=label,
+        lens=lens,
+        confidence=confidence,
+        score=score,
+        tier=config_module.TIER_LABELS[score],
+        evidence=evidence,
+        raw_metrics=raw_metrics or {},
+        remediation=remediation_map[score],
+    )
+
+
 def run_check(check_module, ctx):
     try:
         return check_module.run(ctx)

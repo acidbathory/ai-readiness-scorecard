@@ -1,6 +1,6 @@
 """Confidence: MEDIUM. `ChangeTrackingEvent` is a real, populated NRQL event
-type -- confirmed live on a real account (2026-08-20, 70 events over 90
-days) with `category`/`description` fields. What's a heuristic, not
+type -- confirmed live on a real account (2026-08-20) with `category`/
+`description` fields. What's a heuristic, not
 confirmed: whether an entry is AI/prompt/model-related. NRQL `LIKE`
 case-sensitivity is uncertain, so this fetches raw `description` text (same
 "fetch raw, pattern-match locally" approach as apm_coverage.py) and keyword-
@@ -9,9 +9,9 @@ matches in Python instead of trusting a NRQL string filter. Capped at a
 so evidence can disclose when the sample is a subset of a larger history.
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY
 from ..scoring import tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "ai_change_tracking"
 LABEL = "AI/prompt/model change tracking"
@@ -34,12 +34,6 @@ REMEDIATION_UNKNOWN = (
     "Confirm the New Relic user key has NRQL read permission for the ChangeTrackingEvent "
     "event type on this account."
 )
-
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
-}
-"""
 
 AI_KEYWORDS = ("model", "prompt", "llm", "gpt", "gen_ai", "claude", "gemini")
 SAMPLE_LIMIT = 200
@@ -79,14 +73,7 @@ def run(ctx):
         f"keywords over {ctx.lookback_days}d{sample_note}"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"ai_related_events": len(ai_related), "total_events": total_count, "sample_size": len(sample)},
-        remediation=REMEDIATION[score],
     )

@@ -1,18 +1,23 @@
-"""Confidence: HIGH for base infra host count (entitySearch count field, same
+"""Confidence: MEDIUM. Base infra host count (entitySearch count field, same
 primitive as apm_coverage but no pagination needed since we only want the
-total). The GPU sub-signal is best-effort: `gpuUtilizationPercent` is an
-assumed SystemSample attribute name, unconfirmed against a real account --
-if it errors, try the alternate `gpu.utilization` Metric-type name instead.
+total) is HIGH on its own -- but the GPU sub-signal is best-effort
+(`gpuUtilizationPercent` is an assumed SystemSample attribute name,
+unconfirmed against a real account -- if it errors, try the alternate
+`gpu.utilization` Metric-type name instead) and is combined via `max`, so it
+can independently lift the tier. A dimension-level `high` badge would
+overstate confidence in exactly the sub-signal that's least confirmed, so
+this is capped at MEDIUM until the GPU attribute name is confirmed live --
+same reasoning as apm_coverage's aiEnabledApp tag.
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as GPU_HOSTS_QUERY
 from ..scoring import combine_tiers, tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "infra_gpu"
 LABEL = "Infra coverage, incl. GPU visibility"
 LENS = "observability_for_ai"
-CONFIDENCE = "high"
+CONFIDENCE = "medium"
 REMEDIATION = {
     0: "Install the New Relic Infrastructure agent on your compute hosts. If you run "
        "GPU workloads, also add the NVIDIA DCGM integration (`nri-gpu`) so GPU "
@@ -32,12 +37,8 @@ REMEDIATION_UNKNOWN = (
 )
 
 HOSTS_QUERY = """
-{ actor { entitySearch(query: "domain = 'INFRA' AND type = 'HOST' AND reporting = 'true'") { count } } }
-"""
-
-GPU_HOSTS_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
+query($query: String!) {
+  actor { entitySearch(query: $query) { count } }
 }
 """
 
@@ -45,7 +46,11 @@ query($accountId: Int!, $nrql: Nrql!) {
 def run(ctx):
     thresholds = ctx.config[DIMENSION]
 
-    hosts_data = ctx.gql(HOSTS_QUERY, fixture_key="infra_gpu.hosts")
+    hosts_data = ctx.gql(
+        HOSTS_QUERY,
+        {"query": f"domain = 'INFRA' AND type = 'HOST' AND reporting = 'true' AND accountId = {ctx.account_id}"},
+        fixture_key="infra_gpu.hosts",
+    )
     host_count = hosts_data.get("actor", {}).get("entitySearch", {}).get("count", 0)
 
     gpu_nrql = (
@@ -75,14 +80,7 @@ def run(ctx):
         f"against a real account)"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"host_count": host_count, "gpu_host_count": gpu_host_count},
-        remediation=REMEDIATION[score],
     )

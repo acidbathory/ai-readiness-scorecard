@@ -5,9 +5,9 @@ visible, or is it just flat chat completions?
 
 Two independent tool-call detection paths, gating the score via max (either
 proves readiness): New Relic's own `LlmTool` custom event (confirmed real and
-heavily populated, 365K events on a live account, 2026-08-20) and OpenTelemetry
-GenAI's `gen_ai.tool.name` Span attribute (confirmed real and populated on the
-SAME account, 367K spans) -- researched to be a genuinely DISTINCT schema, not
+heavily populated on a live account, 2026-08-20) and OpenTelemetry
+GenAI's `gen_ai.tool.name` Span attribute (confirmed real and heavily
+populated on the SAME account) -- researched to be a genuinely DISTINCT schema, not
 a duplicate: `LlmTool` is New Relic's own AI-Monitoring-specific event type,
 `gen_ai.tool.name` is OTel's generic "any tool execution" span convention
 (e.g. emitted by OpenLLMetry/Traceloop-instrumented accounts that never
@@ -20,9 +20,9 @@ account tested, so both are surfaced as evidence only, not allowed to drag
 the score down (same pattern as infra_gpu.py's GPU sub-signal).
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY
 from ..scoring import combine_tiers, tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "ai_agent_tracing"
 LABEL = "AI agent tool-call & retrieval (RAG) tracing"
@@ -46,11 +46,6 @@ REMEDIATION_UNKNOWN = (
     "`LlmTool` and `Span` event types."
 )
 
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
-}
-"""
 
 
 def _count(ctx, from_clause, fixture_key):
@@ -82,19 +77,12 @@ def run(ctx):
         f"{genai_retrieval_count} gen_ai.data_source.id spans (over {ctx.lookback_days}d)"
     )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={
             "tool_call_count": tool_call_count,
             "genai_tool_call_count": genai_tool_count,
             "vector_search_count": vector_search_count,
             "genai_retrieval_count": genai_retrieval_count,
         },
-        remediation=REMEDIATION[score],
     )

@@ -3,10 +3,14 @@ via `--config overrides.json` (deep-merged onto THRESHOLDS by cli.py) since
 thresholds will need tuning per real customer and other SCs will reuse this.
 """
 
+import hashlib
+import json
+
 LOOKBACK_DAYS_DEFAULT = 30
 
 TIER_LABELS = {0: "Absent", 1: "Ad hoc", 2: "Managed", 3: "Optimized"}
-UNKNOWN_TIER_LABEL = "Unknown"
+UNKNOWN_TIER_LABEL = "Unknown"  # the check couldn't run/measure -- distinct from N/A below
+NOT_APPLICABLE_TIER_LABEL = "Not Applicable"  # the check ran fine; there was nothing to measure
 
 LENS_LABELS = {
     "observability_for_ai": "Observability for AI",
@@ -39,9 +43,6 @@ THRESHOLDS = {
         "min_ai_change_events_for_tier": {1: 1, 2: 3, 3: 8},
     },
     "apm_coverage": {
-        "ai_adjacent_patterns": [
-            "*llm*", "*gpt*", "*ai*", "*rag*", "*agent*", "*inference*", "*model*",
-        ],
         "min_entities_for_tier": {1: 1, 2: 3, 3: 8},
     },
     "infra_gpu": {
@@ -64,6 +65,12 @@ THRESHOLDS = {
         "min_dashboards_for_tier": {1: 1, 2: 3, 3: 6},
         "min_log_gb_per_day_for_tier": {1: 0.01, 2: 1, 3: 10},
     },
+    "ai_coding_observability": {
+        # No live-confirmed baseline yet -- placeholder numbers borrowed from
+        # ai_agent_tracing's tool-call thresholds, the closest already-tuned
+        # "event count over the lookback window" shape in this codebase.
+        "min_tool_call_events_for_tier": {1: 1, 2: 100, 3: 1_000},
+    },
 }
 
 
@@ -77,3 +84,13 @@ def deep_merge(base, overrides):
         else:
             merged[key] = value
     return merged
+
+
+def config_fingerprint(thresholds):
+    """Short, stable hash of the exact thresholds a run used -- so two
+    scorecards from two engagements can be compared knowing whether they were
+    scored against the same rules, without diffing every number by hand. Any
+    `--config overrides.json` changes this; the default THRESHOLDS always
+    hashes to the same value."""
+    canonical = json.dumps(thresholds, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:12]

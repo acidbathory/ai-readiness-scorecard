@@ -8,6 +8,7 @@ import time
 import webbrowser
 from pathlib import Path
 
+from . import __version__
 from . import config as config_module
 from .checks import ALL_CHECKS, CHECKS_BY_DIMENSION
 from .checks.base import Context, run_check
@@ -19,7 +20,7 @@ from .scoring import aggregate
 def build_arg_parser():
     p = argparse.ArgumentParser(
         prog="ai-readiness",
-        description="Score a New Relic account's AI readiness across 14 dimensions.",
+        description="Score a New Relic account's AI readiness across 15 dimensions.",
         epilog="Run with --mock first if you don't have credentials handy yet.",
     )
 
@@ -229,6 +230,8 @@ def main(argv=None):
         "lookback_days": lookback_days,
         "mock": args.mock,
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "tool_version": __version__,
+        "config_fingerprint": config_module.config_fingerprint(thresholds),
     }
 
     if args.output in ("table", "both"):

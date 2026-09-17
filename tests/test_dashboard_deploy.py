@@ -48,11 +48,14 @@ class TestBuildDashboardPayload(unittest.TestCase):
 class FakeGql:
     """Records every call; scripted responses keyed by mutation/query substring."""
 
-    def __init__(self, existing_guids=None, create_result=None):
+    def __init__(self, existing_guids=None, create_result=None, update_result=None):
         self.calls = []
         self.existing_guids = existing_guids or []
         self.create_result = create_result or {
             "dashboardCreate": {"entityResult": {"guid": "new-guid", "name": "x"}, "errors": None}
+        }
+        self.update_result = update_result or {
+            "dashboardUpdate": {"entityResult": {"guid": "old-guid-1", "name": "x"}, "errors": None}
         }
 
     def __call__(self, query, variables=None, fixture_key=None):
@@ -65,8 +68,8 @@ class FakeGql:
                     }
                 }
             }
-        if "dashboardDelete" in query:
-            return {"dashboardDelete": {"status": "SUCCESS"}}
+        if "dashboardUpdate" in query:
+            return self.update_result
         if "dashboardCreate" in query:
             return self.create_result
         raise AssertionError(f"unexpected query: {query}")
@@ -78,27 +81,38 @@ class TestDeployUpsert(unittest.TestCase):
         self.agg = aggregate(self.results)
         self.meta = {"account_id": 123, "region": "us", "lookback_days": 30, "mock": False}
 
-    def test_no_existing_dashboard_skips_delete(self):
+    def test_no_existing_dashboard_creates(self):
         gql = FakeGql(existing_guids=[])
         deploy(gql, 123, self.results, self.agg, self.meta)
-        kinds = [("delete" if "dashboardDelete" in q else "create" if "dashboardCreate" in q else "search")
+        kinds = [("update" if "dashboardUpdate" in q else "create" if "dashboardCreate" in q else "search")
                  for q, _ in gql.calls]
-        self.assertNotIn("delete", kinds)
+        self.assertNotIn("update", kinds)
         self.assertIn("create", kinds)
 
-    def test_existing_dashboard_deletes_before_create(self):
+    def test_existing_dashboard_updates_in_place(self):
         gql = FakeGql(existing_guids=["old-guid-1"])
         deploy(gql, 123, self.results, self.agg, self.meta)
-        kinds = [("delete" if "dashboardDelete" in q else "create" if "dashboardCreate" in q else "search")
+        kinds = [("update" if "dashboardUpdate" in q else "create" if "dashboardCreate" in q else "search")
                  for q, _ in gql.calls]
-        self.assertEqual(kinds, ["search", "delete", "create"])
-        delete_call = gql.calls[1]
-        self.assertEqual(delete_call[1], {"g": "old-guid-1"})
+        self.assertEqual(kinds, ["search", "update"])
+        update_call = gql.calls[1]
+        self.assertEqual(update_call[1]["guid"], "old-guid-1")
+
+    def test_search_is_scoped_to_account_id(self):
+        gql = FakeGql(existing_guids=[])
+        deploy(gql, 123, self.results, self.agg, self.meta)
+        search_call = gql.calls[0]
+        self.assertIn("accountId = 123", search_call[1]["query"])
 
     def test_returns_created_entity(self):
         gql = FakeGql(existing_guids=[])
         entity = deploy(gql, 123, self.results, self.agg, self.meta)
         self.assertEqual(entity["guid"], "new-guid")
+
+    def test_returns_updated_entity(self):
+        gql = FakeGql(existing_guids=["old-guid-1"])
+        entity = deploy(gql, 123, self.results, self.agg, self.meta)
+        self.assertEqual(entity["guid"], "old-guid-1")
 
     def test_raises_on_dashboard_create_errors(self):
         gql = FakeGql(
@@ -108,15 +122,36 @@ class TestDeployUpsert(unittest.TestCase):
         with self.assertRaises(Exception):
             deploy(gql, 123, self.results, self.agg, self.meta)
 
+    def test_raises_on_dashboard_update_errors(self):
+        gql = FakeGql(
+            existing_guids=["old-guid-1"],
+            update_result={"dashboardUpdate": {"entityResult": None, "errors": [{"description": "bad"}]}},
+        )
+        with self.assertRaises(Exception):
+            deploy(gql, 123, self.results, self.agg, self.meta)
+
 
 class TestFindExisting(unittest.TestCase):
     def test_returns_guids_from_entity_search(self):
         gql = FakeGql(existing_guids=["g1", "g2"])
-        self.assertEqual(find_existing(gql, "some dashboard"), ["g1", "g2"])
+        self.assertEqual(find_existing(gql, 123, "some dashboard"), ["g1", "g2"])
 
     def test_returns_empty_list_when_none_found(self):
         gql = FakeGql(existing_guids=[])
-        self.assertEqual(find_existing(gql, "some dashboard"), [])
+        self.assertEqual(find_existing(gql, 123, "some dashboard"), [])
+
+    def test_search_query_is_scoped_to_account_and_name(self):
+        gql = FakeGql(existing_guids=[])
+        find_existing(gql, 123, "some dashboard")
+        search_call = gql.calls[0]
+        self.assertIn("accountId = 123", search_call[1]["query"])
+        self.assertIn("name = 'some dashboard'", search_call[1]["query"])
+
+    def test_escapes_single_quote_in_name(self):
+        gql = FakeGql(existing_guids=[])
+        find_existing(gql, 123, "Customer's Dashboard")
+        search_call = gql.calls[0]
+        self.assertIn("Customer\\'s Dashboard", search_call[1]["query"])
 
 
 if __name__ == "__main__":

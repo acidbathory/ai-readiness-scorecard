@@ -14,8 +14,9 @@ backend-agnostic OTel SDK -- New Relic is just one of ~20 tested
 destinations): an account instrumented via generic OTel GenAI
 auto-instrumentation instead of New Relic's own AI Monitoring agent hooks
 emits `gen_ai.*` attributes on plain `Span` events -- a genuinely separate
-telemetry path, confirmed live on the same account (`gen_ai.request.model`:
-2.5M+ spans, `gen_ai.usage.{input,output}_tokens`: 1.2M+) -- and could show
+telemetry path, confirmed live and heavily populated on the same account
+(`gen_ai.request.model` and `gen_ai.usage.{input,output}_tokens` both present)
+-- and could show
 ZERO `Llm*` custom events while still being fully instrumented. Both paths
 are computed independently and combined via max: either one proves
 readiness, neither is required.
@@ -31,9 +32,9 @@ captures raw prompt/completion content into span attributes BY DEFAULT
 surfacing as a data-governance/PII note, not a maturity signal either way.
 """
 
+from ..nerdgraph import GENERIC_NRQL_QUERY as NRQL_QUERY
 from ..scoring import combine_tiers, tier_from_count
-from .base import CheckResult
-from .. import config as config_module
+from .base import result_for
 
 DIMENSION = "ai_monitoring"
 LABEL = "AI Monitoring / LLM span coverage"
@@ -60,22 +61,20 @@ REMEDIATION_UNKNOWN = (
     "that `LlmChatCompletionSummary` / `Span` event types are queryable."
 )
 
-NRQL_QUERY = """
-query($accountId: Int!, $nrql: Nrql!) {
-  actor { account(id: $accountId) { nrql(query: $nrql) { results } } }
-}
-"""
-
-
 def _nrql_result(ctx, nrql, fixture_key):
     data = ctx.gql(NRQL_QUERY, {"accountId": ctx.account_id, "nrql": nrql}, fixture_key=fixture_key)
     return data.get("actor", {}).get("account", {}).get("nrql", {}).get("results", [])
 
 
 def _single_value(results, key=None):
+    """NRQL aggregations like percentage() return null, not 0, over zero
+    events -- the commonest case for an account with no AI telemetry yet.
+    Coerce that null to 0 here so callers can rely on always getting a
+    number back, never None."""
     if not results:
         return 0
-    return results[0].get(key, 0) if key else next(iter(results[0].values()), 0)
+    value = results[0].get(key, 0) if key else next(iter(results[0].values()), 0)
+    return 0 if value is None else value
 
 
 def _path_tier(ctx, thresholds, from_clause, token_condition, key_prefix):
@@ -140,14 +139,8 @@ def run(ctx):
             f"(gen_ai.prompt / gen_ai.input.messages) -- review for PII handling."
         )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={
             "llm_event_count": llm_events,
             "llm_entity_count": llm_entities,
@@ -157,5 +150,4 @@ def run(ctx):
             "genai_token_visibility_pct": round(genai_token_pct, 1),
             "content_capture_span_count": content_capture_count,
         },
-        remediation=REMEDIATION[score],
     )

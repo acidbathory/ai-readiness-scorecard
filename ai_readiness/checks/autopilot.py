@@ -2,15 +2,14 @@
 reference repo -- it's only ever invoked as a `newrelic.autopilot.run` action
 step inside a Workflow Automation canvas. This check reuses
 workflow_automation's confirmed workflow list, then fetches each workflow's
-YAML definition (shape confirmed: continental-demo/scripts/bootstrap.py:99-106)
+YAML definition (shape confirmed: reference-repo-a/scripts/bootstrap.py:99-106)
 and text-matches for an Autopilot action -- an indirect heuristic layered on
 a confirmed primitive, hence "medium" rather than "high" confidence.
 """
 
 from ..scoring import tier_from_count
-from .base import CheckResult
+from .base import result_for
 from .workflow_automation import fetch_workflows, fetch_workflow_yaml
-from .. import config as config_module
 
 DIMENSION = "autopilot"
 LABEL = "Autopilot usage within Workflow Automation"
@@ -55,14 +54,7 @@ def run(ctx):
             f"standalone NerdGraph query, so this is an indirect signal)"
         )
 
-    return CheckResult(
-        dimension=DIMENSION,
-        label=LABEL,
-        lens=LENS,
-        confidence=CONFIDENCE,
-        score=score,
-        tier=config_module.TIER_LABELS[score],
-        evidence=evidence,
+    return result_for(
+        DIMENSION, LABEL, LENS, CONFIDENCE, REMEDIATION, score, evidence,
         raw_metrics={"autopilot_workflows": matched, "total_workflows": len(workflows)},
-        remediation=REMEDIATION[score],
     )
