@@ -253,16 +253,11 @@ and one registry line, nothing else changes.
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a PR:
-
-```bash
-make test    # or: python3 -m unittest discover tests
-```
-
-CI runs the same suite on Python 3.9 and 3.12 for every push and PR (see
-[.github/workflows/test.yml](.github/workflows/test.yml)). Each dimension lives in its own
-`ai_readiness/checks/*.py` file — adding a new one means adding one file and one registry line
-in [`ai_readiness/checks/__init__.py`](ai_readiness/checks/__init__.py), nothing else changes.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
+guide — adding a new dimension, testing against a real account, style conventions, and the
+release process. Short version: `make test` (or `python3 -m unittest discover tests`) before
+every PR; CI runs the same suite on Python 3.9 and 3.12
+([.github/workflows/test.yml](.github/workflows/test.yml)).
 
 ## License
 
