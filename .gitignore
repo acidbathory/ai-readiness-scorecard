@@ -12,3 +12,6 @@ ai_readiness_report.html
 scorecard.html
 .DS_Store
 
+# Internal presentation deck -- never publish to GitHub
+presentation/
+
