@@ -1,6 +1,6 @@
 """Confidence: UNVERIFIED. No confirmed NerdGraph/NRQL shape for security or
 vulnerability-management coverage exists anywhere in either reference repo --
-this check tries two candidate query shapes and, if both fail, reports an
+this check tries three candidate query shapes and, if both fail, reports an
 honest "Unknown" tier rather than a false "Absent" (a real account that
 genuinely has zero vulnerability scanning should read as Absent; an account
 where we simply guessed the wrong query should not look the same).
@@ -51,30 +51,43 @@ def run(ctx):
     count = None
     source = None
 
-    try:
-        data = ctx.gql(
-            VULN_DOMAIN_QUERY,
-            {"query": f"domain = 'VULN' AND accountId = {ctx.account_id}"},
-            fixture_key="security_vuln.vuln_domain",
-        )
-        count = data.get("actor", {}).get("entitySearch", {}).get("count", 0)
-        source = "entitySearch(domain = 'VULN')"
-    except NerdGraphError as exc:
-        attempts.append(f"entitySearch(domain='VULN') failed: {exc}")
+    # Candidates, tried in order; the first one returning a nonzero count wins,
+    # otherwise the first that ran without error (a real zero) is used.
+    # `SECURITY_FINDING` is the entity type documented for Security RX /
+    # vulnerability management (docs-source only, not live-confirmed); the
+    # `domain = 'VULN'` and NrAiVulnerability shapes are the older guesses.
+    def _entity(query, key, label):
+        data = ctx.gql(VULN_DOMAIN_QUERY, {"query": query}, fixture_key=key)
+        return data.get("actor", {}).get("entitySearch", {}).get("count", 0), label
 
-    if count is None:
+    def _nrql():
+        nrql = f"SELECT count(*) FROM NrAiVulnerability SINCE {ctx.lookback_days} days ago"
+        data = ctx.gql(
+            NRAI_VULN_NRQL_QUERY,
+            {"accountId": ctx.account_id, "nrql": nrql},
+            fixture_key="security_vuln.nrai_vuln",
+        )
+        results = data.get("actor", {}).get("account", {}).get("nrql", {}).get("results", [])
+        return (results[0].get("count", 0) if results else 0), "NRQL FROM NrAiVulnerability"
+
+    candidates = [
+        lambda: _entity(f"type = 'SECURITY_FINDING' AND accountId = {ctx.account_id}",
+                        "security_vuln.security_finding", "entitySearch(type = 'SECURITY_FINDING')"),
+        lambda: _entity(f"domain = 'VULN' AND accountId = {ctx.account_id}",
+                        "security_vuln.vuln_domain", "entitySearch(domain = 'VULN')"),
+        _nrql,
+    ]
+    for attempt in candidates:
         try:
-            nrql = f"SELECT count(*) FROM NrAiVulnerability SINCE {ctx.lookback_days} days ago"
-            data = ctx.gql(
-                NRAI_VULN_NRQL_QUERY,
-                {"accountId": ctx.account_id, "nrql": nrql},
-                fixture_key="security_vuln.nrai_vuln",
-            )
-            results = data.get("actor", {}).get("account", {}).get("nrql", {}).get("results", [])
-            count = results[0].get("count", 0) if results else 0
-            source = "NRQL FROM NrAiVulnerability"
+            c, label = attempt()
         except NerdGraphError as exc:
-            attempts.append(f"NRQL FROM NrAiVulnerability failed: {exc}")
+            attempts.append(f"{exc}")
+            continue
+        if count is None:
+            count, source = c, label
+        if c > 0:
+            count, source = c, label
+            break
 
     if count is None:
         evidence = (
@@ -92,7 +105,7 @@ def run(ctx):
             tier=config_module.UNKNOWN_TIER_LABEL,
             evidence=evidence,
             raw_metrics={},
-            error="both candidate queries failed",
+            error="all candidate queries failed",
             remediation=REMEDIATION_UNKNOWN,
         )
 

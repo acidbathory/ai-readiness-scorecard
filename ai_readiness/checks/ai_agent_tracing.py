@@ -3,6 +3,11 @@ retrieval (RAG) spans concepts, combined into one dimension -- multiple event
 schemas, one maturity signal: is agentic/multi-step AI behavior actually
 visible, or is it just flat chat completions?
 
+Agent-level signals (`LlmAgent` events from the NR agents' LangGraph/Strands/AutoGen
+instrumentation, and OTel `gen_ai.agent.name` spans) join the same max: an agent
+run is itself proof of agentic tracing even where individual tools aren't traced.
+(Added from docs/source research, not yet confirmed on a live account.)
+
 Two independent tool-call detection paths, gating the score via max (either
 proves readiness): New Relic's own `LlmTool` custom event (confirmed real and
 heavily populated on a live account, 2026-08-20) and OpenTelemetry
@@ -60,6 +65,8 @@ def run(ctx):
 
     tool_call_count = _count(ctx, "LlmTool", "ai_agent_tracing.tool_calls")
     genai_tool_count = _count(ctx, "Span WHERE gen_ai.tool.name IS NOT NULL", "ai_agent_tracing.genai_tool_calls")
+    agent_count = _count(ctx, "LlmAgent", "ai_agent_tracing.agents")
+    genai_agent_count = _count(ctx, "Span WHERE gen_ai.agent.name IS NOT NULL", "ai_agent_tracing.genai_agents")
     vector_search_count = _count(ctx, "LlmVectorSearch", "ai_agent_tracing.vector_search")
     genai_retrieval_count = _count(
         ctx, "Span WHERE gen_ai.data_source.id IS NOT NULL", "ai_agent_tracing.genai_retrieval"
@@ -68,11 +75,14 @@ def run(ctx):
     score = combine_tiers(
         tier_from_count(tool_call_count, thresholds["min_tool_call_events_for_tier"]),
         tier_from_count(genai_tool_count, thresholds["min_tool_call_events_for_tier"]),
+        tier_from_count(agent_count, thresholds["min_tool_call_events_for_tier"]),
+        tier_from_count(genai_agent_count, thresholds["min_tool_call_events_for_tier"]),
         method="max",
     )
 
     evidence = (
-        f"Tool-call tracing: {tool_call_count} LlmTool events, {genai_tool_count} gen_ai.tool.name spans. "
+        f"Tool-call tracing: {tool_call_count} LlmTool events, {genai_tool_count} gen_ai.tool.name spans, "
+        f"{agent_count} LlmAgent events, {genai_agent_count} gen_ai.agent.name spans. "
         f"Retrieval/RAG tracing (evidence only): {vector_search_count} LlmVectorSearch events, "
         f"{genai_retrieval_count} gen_ai.data_source.id spans (over {ctx.lookback_days}d)"
     )
@@ -82,6 +92,8 @@ def run(ctx):
         raw_metrics={
             "tool_call_count": tool_call_count,
             "genai_tool_call_count": genai_tool_count,
+            "agent_count": agent_count,
+            "genai_agent_count": genai_agent_count,
             "vector_search_count": vector_search_count,
             "genai_retrieval_count": genai_retrieval_count,
         },

@@ -84,12 +84,16 @@ NONE = {
     "ai_agent_tracing.genai_tool_calls": _nrql_results([{"count": 0}]),
     "ai_agent_tracing.vector_search": _nrql_results([{"count": 0}]),
     "ai_agent_tracing.genai_retrieval": _nrql_results([{"count": 0}]),
+    "ai_agent_tracing.agents": _nrql_results([{"count": 0}]),
+    "ai_agent_tracing.genai_agents": _nrql_results([{"count": 0}]),
     "ai_quality_feedback.events": _nrql_results([{"count": 0}]),
     # human_approval_gates: NONE scenario has zero workflows (see
     # workflow_automation.workflows below), so fetch_workflows() returns []
     # and the per-workflow YAML loop never runs -- no yaml:: fixture needed.
     "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 0}]),
     "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 0}]),
+    "model_vendor_diversity.genai_provider_vendors": _nrql_results([{"uniqueCount.gen_ai.provider.name": 0}]),
+    "security_vuln.security_finding": _entity_count(0),
     "security_vuln.vuln_domain": _entity_count(0),
     "security_vuln.nrai_vuln": _nrql_results([{"count": 0}]),
     "workflow_automation.workflows": _workflows([]),
@@ -144,7 +148,10 @@ PARTIAL = {
     "ai_agent_tracing.genai_tool_calls": _nrql_results([{"count": 20}]),
     "ai_agent_tracing.vector_search": _nrql_results([{"count": 5}]),
     "ai_agent_tracing.genai_retrieval": _nrql_results([{"count": 2}]),
+    "ai_agent_tracing.agents": _nrql_results([{"count": 3}]),
+    "ai_agent_tracing.genai_agents": _nrql_results([{"count": 1}]),
     "ai_quality_feedback.events": _nrql_results([{"count": 10}]),
+    "security_vuln.security_finding": _entity_count(3),
     "security_vuln.vuln_domain": _entity_count(3),
     "security_vuln.nrai_vuln": _nrql_results([{"count": 3}]),
     "workflow_automation.workflows": _workflows(_PARTIAL_WORKFLOW_NAMES),
@@ -165,6 +172,7 @@ PARTIAL = {
     "human_approval_gates.yaml::wf-d": _workflow_yaml("steps:\n  - action: slack.chat.postMessage\n"),
     "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 1}]),
     "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 2}]),
+    "model_vendor_diversity.genai_provider_vendors": _nrql_results([{"uniqueCount.gen_ai.provider.name": 0}]),
     "alerting_anomaly.conditions": _alert_conditions(
         [
             {"id": str(i), "name": f"condition-{i}", "enabled": True,
@@ -236,7 +244,10 @@ MATURE = {
     "ai_agent_tracing.genai_tool_calls": _nrql_results([{"count": 1200}]),
     "ai_agent_tracing.vector_search": _nrql_results([{"count": 50}]),
     "ai_agent_tracing.genai_retrieval": _nrql_results([{"count": 30}]),
+    "ai_agent_tracing.agents": _nrql_results([{"count": 40}]),
+    "ai_agent_tracing.genai_agents": _nrql_results([{"count": 25}]),
     "ai_quality_feedback.events": _nrql_results([{"count": 250}]),
+    "security_vuln.security_finding": _entity_count(25),
     "security_vuln.vuln_domain": _entity_count(25),
     "security_vuln.nrai_vuln": _nrql_results([{"count": 25}]),
     "workflow_automation.workflows": _workflows(_MATURE_WORKFLOW_NAMES),
@@ -257,6 +268,7 @@ MATURE = {
     },
     "model_vendor_diversity.llm_vendors": _nrql_results([{"uniqueCount.vendor": 3}]),
     "model_vendor_diversity.genai_vendors": _nrql_results([{"uniqueCount.gen_ai.system": 2}]),
+    "model_vendor_diversity.genai_provider_vendors": _nrql_results([{"uniqueCount.gen_ai.provider.name": 1}]),
     "alerting_anomaly.conditions": _alert_conditions(
         [
             {"id": str(i), "name": f"condition-{i}", "enabled": True,

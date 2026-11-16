@@ -44,7 +44,7 @@ def run(ctx):
 
     total_results = ctx.gql(
         NRQL_QUERY,
-        {"accountId": ctx.account_id, "nrql": f"SELECT count(*) FROM ChangeTrackingEvent SINCE {ctx.lookback_days} days ago"},
+        {"accountId": ctx.account_id, "nrql": f"SELECT count(*) FROM ChangeTrackingEvent, Deployment SINCE {ctx.lookback_days} days ago"},
         fixture_key="ai_change_tracking.total",
     )
     total_count = (
@@ -55,7 +55,7 @@ def run(ctx):
         NRQL_QUERY,
         {
             "accountId": ctx.account_id,
-            "nrql": f"SELECT description FROM ChangeTrackingEvent SINCE {ctx.lookback_days} days ago LIMIT {SAMPLE_LIMIT}",
+            "nrql": f"SELECT description FROM ChangeTrackingEvent, Deployment SINCE {ctx.lookback_days} days ago LIMIT {SAMPLE_LIMIT}",
         },
         fixture_key="ai_change_tracking.events",
     )

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+Driven by a docs/source review of New Relic's current AI features (not yet confirmed against a live account).
+
+- `model_vendor_diversity`: also queries `gen_ai.provider.name` (the current OTel GenAI name); `gen_ai.system` is deprecated.
+- `ai_agent_tracing`: `LlmAgent` events and `gen_ai.agent.name` spans now count toward the tier.
+- `ai_change_tracking`: queries `ChangeTrackingEvent, Deployment` (legacy `Deployment` is still queryable).
+- `security_vuln`: tries the documented `SECURITY_FINDING` entity type first, then the older `domain = 'VULN'` and `NrAiVulnerability` shapes.
+- Remediation text: `ai_monitoring` notes AI Monitoring is on by default in newer agents; `infra_gpu` lists the other GPU integrations (detection still only covers `gpuUtilizationPercent`).
+- New `tests/test_research_updates.py` (9 tests) covering all of the above.
+
 ## 0.2.0 — 2026-09-17
 
 A VP-level code review (`ai-readiness-scorecard-review.md`, reviewed at commit `7363d31`)

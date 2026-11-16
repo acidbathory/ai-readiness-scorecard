@@ -42,7 +42,7 @@ LENS = "observability_for_ai"
 CONFIDENCE = "medium"
 REMEDIATION = {
     0: "No LLM telemetry detected via either path. Enable AI Monitoring in your New "
-       "Relic APM agent config (`ai_monitoring.enabled: true`), or add OpenTelemetry "
+       "Relic APM agent (recent agents, e.g. Python 14.3.0+, enable it by default; older ones need `ai_monitoring.enabled: true`), or add OpenTelemetry "
        "GenAI auto-instrumentation (e.g. OpenLLMetry) pointing its OTLP exporter at "
        "New Relic's endpoint.",
     1: "LLM calls are visible but coverage or token-tracking is thin -- instrument "

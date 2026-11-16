@@ -9,8 +9,7 @@ coverage?
 
 `gen_ai.system` is the deprecated OTel attribute name (renamed to
 `gen_ai.provider.name` in the GenAI semconv v1.37.0) -- same rename-to-watch
-note as ai_monitoring.py. Queries `gen_ai.system` because it's the one
-confirmed populated; add `gen_ai.provider.name` alongside it once that
+note as ai_monitoring.py. Queries both `gen_ai.system` and `gen_ai.provider.name`; the latter was added once that
 attribute shows up live on some account.
 """
 
@@ -56,19 +55,30 @@ def run(ctx):
         "model_vendor_diversity.llm_vendors",
         "uniqueCount.vendor",
     )
-    genai_vendor_count = _unique_count(
+    # `gen_ai.system` is the deprecated name, `gen_ai.provider.name` the current one
+    # (semconv v1.37.0). Instrumentation in the wild emits either, so query both and
+    # take the larger count (a lower bound on the distinct set if both are present).
+    genai_system_count = _unique_count(
         ctx,
         f"SELECT uniqueCount(gen_ai.system) FROM Span WHERE gen_ai.request.model IS NOT NULL "
         f"SINCE {ctx.lookback_days} days ago",
         "model_vendor_diversity.genai_vendors",
         "uniqueCount.gen_ai.system",
     )
+    genai_provider_count = _unique_count(
+        ctx,
+        f"SELECT uniqueCount(gen_ai.provider.name) FROM Span WHERE gen_ai.request.model IS NOT NULL "
+        f"SINCE {ctx.lookback_days} days ago",
+        "model_vendor_diversity.genai_provider_vendors",
+        "uniqueCount.gen_ai.provider.name",
+    )
+    genai_vendor_count = max(genai_system_count, genai_provider_count)
     vendor_count = max(llm_vendor_count, genai_vendor_count)
 
     score = tier_from_count(vendor_count, thresholds["min_vendor_count_for_tier"])
     evidence = (
         f"{llm_vendor_count} distinct vendor(s) via LlmChatCompletionSummary, "
-        f"{genai_vendor_count} distinct gen_ai.system value(s) via Span "
+        f"{genai_vendor_count} distinct gen_ai.provider.name/gen_ai.system value(s) via Span "
         f"(scoring on the stronger of the two signals)"
     )
 
@@ -77,6 +87,8 @@ def run(ctx):
         raw_metrics={
             "llm_vendor_count": llm_vendor_count,
             "genai_vendor_count": genai_vendor_count,
+            "genai_system_count": genai_system_count,
+            "genai_provider_count": genai_provider_count,
             "vendor_count": vendor_count,
         },
     )

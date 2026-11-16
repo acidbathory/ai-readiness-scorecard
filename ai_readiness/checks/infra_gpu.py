@@ -20,8 +20,9 @@ LENS = "observability_for_ai"
 CONFIDENCE = "medium"
 REMEDIATION = {
     0: "Install the New Relic Infrastructure agent on your compute hosts. If you run "
-       "GPU workloads, also add the NVIDIA DCGM integration (`nri-gpu`) so GPU "
-       "utilization reports alongside CPU/memory.",
+       "GPU workloads, also add a GPU integration (NVIDIA DCGM or nvidia-smi, Triton, "
+       "Jetson, or AMD GPU) so GPU utilization reports alongside CPU/memory. Note "
+       "this check currently only detects the `gpuUtilizationPercent` SystemSample attribute.",
     1: "Infra hosts are reporting but GPU metrics aren't -- confirm the DCGM "
        "exporter is running on every GPU host and that `nri-gpu` is enabled in the "
        "Infrastructure agent config, not just installed.",
