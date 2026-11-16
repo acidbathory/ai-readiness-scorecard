@@ -1,15 +1,50 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-16
 
-Driven by a docs/source review of New Relic's current AI features (not yet confirmed against a live account).
+Refresh driven by a review of New Relic's current AI features (docs-website source, the Python
+agent releases, and the OpenTelemetry GenAI semantic conventions). **None of the new query shapes
+have been confirmed against a live account yet** — they come from documentation and agent source,
+so the affected dimensions keep their existing confidence badges. 75 tests pass (up from 66).
 
-- `model_vendor_diversity`: also queries `gen_ai.provider.name` (the current OTel GenAI name); `gen_ai.system` is deprecated.
-- `ai_agent_tracing`: `LlmAgent` events and `gen_ai.agent.name` spans now count toward the tier.
-- `ai_change_tracking`: queries `ChangeTrackingEvent, Deployment` (legacy `Deployment` is still queryable).
-- `security_vuln`: tries the documented `SECURITY_FINDING` entity type first, then the older `domain = 'VULN'` and `NrAiVulnerability` shapes.
-- Remediation text: `ai_monitoring` notes AI Monitoring is on by default in newer agents; `infra_gpu` lists the other GPU integrations (detection still only covers `gpuUtilizationPercent`).
-- New `tests/test_research_updates.py` (9 tests) covering all of the above.
+### Changed — scoring behavior
+
+- `model_vendor_diversity`: also queries `gen_ai.provider.name`, the current OTel GenAI name
+  (`gen_ai.system` is deprecated). Uses the larger of the two distinct-vendor counts, so an
+  account emitting both names can be undercounted but never overcounted. New `raw_metrics`:
+  `genai_system_count`, `genai_provider_count`.
+- `ai_agent_tracing`: `LlmAgent` events (New Relic agents' LangGraph/Strands/AutoGen
+  instrumentation) and OTel `gen_ai.agent.name` spans now join the tool-call signals in the
+  `max`. Accounts running agent frameworks may score higher than before. New `raw_metrics`:
+  `agent_count`, `genai_agent_count`.
+- `ai_change_tracking`: queries `ChangeTrackingEvent, Deployment` instead of
+  `ChangeTrackingEvent` alone. The legacy `Deployment` event type is still queryable and holds
+  older deploy markers.
+- `security_vuln`: now tries three candidate shapes in order — entity type `SECURITY_FINDING`
+  (the type documented for Security RX), then `domain = 'VULN'`, then `NrAiVulnerability`.
+  The first nonzero count wins; a real zero still scores Absent, and Unknown is reported only
+  if every candidate errors.
+
+### Changed — remediation text only
+
+- `ai_monitoring`: notes that recent agents (e.g. Python 14.3.0+) enable AI Monitoring by
+  default, so Llm* event presence alone is a weaker signal; token visibility is what separates tiers.
+- `infra_gpu`: lists the other GPU integrations (nvidia-smi, Triton, Jetson, AMD). Detection is
+  unchanged and still only covers the `gpuUtilizationPercent` SystemSample attribute.
+
+### Added
+
+- `tests/test_research_updates.py` (9 tests) covering the four scoring changes above, plus mock
+  fixtures for every new query in all three scenarios.
+
+### Reviewed, not changed
+
+- `human_approval_gates`: its `waitfor` marker already matches the documented
+  `newrelic.notification.waitForStatus` action; `signalWorkflowRun` is an API, not visible in
+  workflow YAML.
+- No "SRE Agent" naming exists in the code or docs, so the Autopilot rename needed nothing.
+- Deliberately not built (preview features or no documented queryable event): Compound Alerts,
+  Outlier Detection, Pathpoint 2.0 / Service Architecture Intelligence, CCI AI Costs, MCP/Knowledge adoption.
 
 ## 0.2.0 — 2026-09-17
 

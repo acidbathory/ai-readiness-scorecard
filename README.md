@@ -136,7 +136,7 @@ prompt/completion content is being captured into spans (`gen_ai.prompt`/`gen_ai.
 since OpenLLMetry captures that content **by default**; worth a PII/data-governance conversation
 if it's nonzero. Note: the `gen_ai.*` convention itself is still spec-flagged *Development*
 status, not Stable — expect attribute renames over time (`gen_ai.system` → `gen_ai.provider.name`
-already happened in v1.37.0).
+already happened in v1.37.0; the vendor-diversity check now queries both).
 
 Four more dimensions target modern, 2025-2026-era AI risk patterns rather than plain telemetry
 coverage: **`human_approval_gates`** (OWASP LLM08, Excessive Agency — is an autonomous action
@@ -247,9 +247,17 @@ and one registry line, nothing else changes.
 - Confirm `ai_coding_observability`'s `AiToolCall`/`AiCodingTask`/`AiAntiPattern` event types
   against an account with New Relic's AI coding observability integration enabled — no account
   tested so far has it, so the query shapes are still a best-effort guess.
-- Watch for OTel GenAI attribute renames (`gen_ai.system` → `gen_ai.provider.name` already
-  happened) and add the new name alongside the old one rather than replacing it outright, since
-  older instrumentation will keep emitting the deprecated name for a while.
+- Confirm the 0.3.0 query shapes against a live account: `SECURITY_FINDING` entities
+  (`security_vuln`), `LlmAgent` / `gen_ai.agent.name` (`ai_agent_tracing`), and
+  `gen_ai.provider.name` (`model_vendor_diversity`). Until then they come from docs and agent source.
+- Widen `infra_gpu` detection beyond `gpuUtilizationPercent` once the metric names for the
+  nvidia-smi, Triton, Jetson and AMD integrations are confirmed.
+- Watch for further OTel GenAI attribute renames (the spec is still *Development* status).
+  The checks query `gen_ai.system` and `gen_ai.provider.name` side by side, since older
+  instrumentation will keep emitting the deprecated name for a while.
+- Candidate dimensions once they are GA or have a documented queryable event: Compound Alerts /
+  Outlier Detection, Pathpoint 2.0 and Service Architecture Intelligence scorecards, Cloud Cost
+  Intelligence AI Costs.
 
 ## Contributing
 
